@@ -188,12 +188,23 @@ def client():
 
 
 def trigger_all(cli, searches):
-    """Start all searches in parallel. Returns [(name, run_id, dataset_id)]."""
+    """Start all searches in parallel. Returns [(name, run_id, dataset_id)].
+
+    A bad input in one search (e.g. an invalid workplaceType) must not sink the whole
+    pull — we isolate per-search start failures and continue with the rest.
+    """
     started = []
     for name, inp in searches:
-        run = cli.actor(ACTOR_ID).start(run_input=inp)
+        try:
+            run = cli.actor(ACTOR_ID).start(run_input=inp)
+        except Exception as e:
+            print(f"  x skip {name}: {e}")
+            continue
         started.append((name, run.id, run.default_dataset_id))
         print(f"  > start {name}: run {run.id}")
+    if not started:
+        sys.exit("No searches could be started — check your searches/*.json inputs "
+                 "(e.g. workplaceType must be one of remote/hybrid/office).")
     RUNS_SIDECAR.write_text(json.dumps(
         {"date": datetime.date.today().isoformat(),
          "runs": [{"name": n, "run_id": r, "dataset_id": d} for n, r, d in started]}, indent=2))

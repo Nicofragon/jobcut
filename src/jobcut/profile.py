@@ -301,12 +301,14 @@ def derive_searches(pd: ProfileData) -> dict[str, dict]:
     slug = _slug(pd.based_in) or "local"
     searches: dict[str, dict] = {}
 
+    # NB: the actor's allowed workplaceType values are "remote" | "hybrid" | "office"
+    # (it has no "on-site" — that label maps to "office").
     if "on-site only" in rm or "onsite only" in rm:
-        searches[slug] = {**base, "workplaceType": ["on-site"], "maxItems": 50, "_note": note}
+        searches[slug] = {**base, "workplaceType": ["office"], "maxItems": 50, "_note": note}
     elif "hybrid only" in rm:
-        searches[slug] = {**base, "workplaceType": ["hybrid", "on-site"], "maxItems": 50, "_note": note}
+        searches[slug] = {**base, "workplaceType": ["hybrid", "office"], "maxItems": 50, "_note": note}
     else:
-        searches[slug] = {**base, "workplaceType": ["on-site", "hybrid"], "maxItems": 50, "_note": note}
+        searches[slug] = {**base, "workplaceType": ["office", "hybrid"], "maxItems": 50, "_note": note}
         if "yes" in rm or "remote" in rm:
             searches["remote"] = {**base, "workplaceType": ["remote"], "maxItems": 65,
                                   "_note": "Remote search. Set geoIds to your region; route.py decides hireability."}

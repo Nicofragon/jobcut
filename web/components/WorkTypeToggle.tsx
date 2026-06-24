@@ -1,10 +1,11 @@
 "use client";
 
-// Multi-select segmented control for work types (remote / hybrid / on-site).
+// Multi-select segmented control for work types. Values match the Apify actor's
+// workplaceType enum (remote / hybrid / office); "On-site" is just the label.
 const WORK_TYPES = [
   { value: "remote", label: "Remote" },
   { value: "hybrid", label: "Hybrid" },
-  { value: "on-site", label: "On-site" },
+  { value: "office", label: "On-site" },
 ];
 
 export default function WorkTypeToggle({

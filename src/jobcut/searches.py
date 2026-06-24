@@ -27,7 +27,7 @@ class StructuredSearch(BaseModel):
     name: str | None = None
     titles: list[str] = Field(default_factory=list)
     locations: list[str] = Field(default_factory=list)        # human names ("European Economic Area")
-    work_types: list[str] = Field(default_factory=list)       # remote | hybrid | on-site
+    work_types: list[str] = Field(default_factory=list)       # actor enum: remote | hybrid | office
     employment_types: list[str] = Field(default_factory=list)
     max_items: int | None = None
     posted_within: str | None = None                          # e.g. "24h"

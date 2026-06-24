@@ -97,7 +97,7 @@ def test_derive_searches_respects_remote_mode():
     s = profile.derive_searches(profile.parse(NURSE_MD))
     assert "remote" not in s                         # on-site only -> no remote search
     only = next(iter(s.values()))
-    assert only["workplaceType"] == ["on-site"]
+    assert only["workplaceType"] == ["office"]   # actor enum: remote|hybrid|office (no "on-site")
     assert only["jobTitles"] == ["Registered Nurse", "ICU Nurse"]
     assert only["geoIds"] == ["REPLACE_ME"]
 

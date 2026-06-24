@@ -30,7 +30,7 @@ const STEPS = ["Connect", "Profile", "Searches", "Scoring", "First run"];
 const WORK_TYPES = [
   { value: "remote", label: "Remote" },
   { value: "hybrid", label: "Hybrid" },
-  { value: "on-site", label: "On-site" },
+  { value: "office", label: "On-site" }, // actor enum is "office"; label stays user-friendly
 ];
 const EMPTY_FIELDS: ProfileFields = {
   target_roles: [],

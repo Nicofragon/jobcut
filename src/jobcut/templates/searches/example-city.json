@@ -6,7 +6,7 @@
     "Product Analyst"
   ],
   "geoIds": ["REPLACE_ME"],
-  "workplaceType": ["on-site", "hybrid"],
+  "workplaceType": ["office", "hybrid"],
   "employmentType": ["full-time"],
   "maxItems": 50,
   "postedLimit": "24h",
