@@ -65,3 +65,6 @@ bin/
 scripts/
 screenshots_versions/
 screenshots_dashboard/
+
+# --- Build-time working agreement (internal, not for the public repo) -------
+CLAUDE.md
