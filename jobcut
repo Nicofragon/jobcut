@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Launcher so you can run ./jobcut from the repo folder without activating the
+# virtual environment. Created by ./setup.sh; run that first if .venv is missing.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ ! -x "$here/.venv/bin/jobcut" ]; then
+  echo "jobcut isn't set up yet — run ./setup.sh first."
+  exit 1
+fi
+exec "$here/.venv/bin/jobcut" "$@"

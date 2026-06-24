@@ -232,6 +232,44 @@ def cmd_age_applications(args) -> int:
     return 0
 
 
+def _maybe_build_web(no_build: bool) -> None:
+    """Build the Next.js console automatically on first run, when Node is available.
+
+    Keeps `jobcut serve` a one-command experience: the user never has to remember
+    `npm install && npm run build`. Resilient — if Node is missing or the build
+    fails, we just fall back to serving the API only.
+    """
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import jobcut
+
+    from .api.app import web_build_dir
+
+    if web_build_dir():
+        return  # already built
+    web = Path(jobcut.__file__).resolve().parents[2] / "web"
+    if not (web / "package.json").exists():
+        return  # installed without the web sources (e.g. a wheel) — nothing to build
+    if no_build:
+        return
+    npm = shutil.which("npm")
+    if not npm:
+        print("  console: Node/npm not found — serving the API only.")
+        print("           install Node 20.9+ from https://nodejs.org, then re-run `jobcut serve`.")
+        return
+    print("  console: first run — building the web console (this happens once)…")
+    try:
+        if not (web / "node_modules").exists():
+            subprocess.run([npm, "install"], cwd=web, check=True)
+        subprocess.run([npm, "run", "build"], cwd=web, check=True)
+        print("  console: build complete.")
+    except subprocess.CalledProcessError:
+        print("  console: web build failed — serving the API only.")
+        print("           build it manually with:  cd web && npm install && npm run build")
+
+
 def cmd_serve(args) -> int:
     """Launch the API (and the static console if built) in one process; --open the browser."""
     try:
@@ -243,6 +281,7 @@ def cmd_serve(args) -> int:
     from .api.app import web_build_dir
 
     paths.data_dir().mkdir(parents=True, exist_ok=True)
+    _maybe_build_web(getattr(args, "no_build", False))
     # Housekeeping on launch: age silent applications to "No response" so the tracker
     # opens with an honest funnel (and a short, actionable "Needs attention").
     from . import db
@@ -355,6 +394,7 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--host", default="127.0.0.1", help="bind host (default 127.0.0.1)")
     ps.add_argument("--port", type=int, default=8000, help="bind port (default 8000)")
     ps.add_argument("--open", action="store_true", help="open the console in your browser")
+    ps.add_argument("--no-build", action="store_true", help="don't auto-build the web console if it's missing")
     ps.set_defaults(func=cmd_serve)
 
     sub.add_parser("dashboard", help="launch the Streamlit dashboard").set_defaults(func=cmd_dashboard)

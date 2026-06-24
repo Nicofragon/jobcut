@@ -53,33 +53,42 @@ explained, from the Apify pull to tracking applied roles.
 
 ## Quick start
 
+One command sets everything up — it creates an isolated environment, installs
+jobcut and its dependencies, builds the web console (if you have Node), and
+scaffolds your data files. You never touch a virtualenv.
+
 ```bash
 git clone git@github.com:Nicofragon/jobcut.git && cd jobcut
-pip install -e .
-
-jobcut init                 # scaffolds .env, profile.md, config/, searches/
-# then edit: .env (APIFY_TOKEN) · profile.md · config/config.json (geography) · searches/*.json
-
-jobcut pull --read          # re-download the last Apify run for FREE (dev)
-# jobcut pull               # a fresh, PAID scrape (~$0.04–0.18/run)
-
-jobcut score                # filter the funnel + score against your profile
-jobcut surface              # write out/shortlist.md
-jobcut market               # write out/market-gaps.md + dashboard
+./setup.sh
 ```
 
-## Web console (recommended)
+Then edit the three files `setup.sh` just created in this folder:
 
-The console gives you onboarding, a daily shortlist, click-to-update status → funnel,
-searches, profile and market gaps — all local. It runs as a thin FastAPI backend that
-also serves the built Next.js UI from the same origin:
+- **`.env`** — add your `APIFY_TOKEN` (from [console.apify.com](https://console.apify.com) → Settings → API).
+- **`profile.md`** — your target roles, real skills and dealbreakers (this drives the scoring).
+- **`searches/*.json`** — your job titles + LinkedIn geoIds (copy an `example-*.json`).
+
+Now run your first scrape and watch jobs populate (use `./jobcut`, no activation needed):
 
 ```bash
-pip install -e '.[api]'        # FastAPI + uvicorn
+./jobcut pull               # first real scrape (~$0.04–0.18 via Apify)
+./jobcut score              # filter the funnel + score against your profile
+./jobcut surface            # write out/shortlist.md
+./jobcut serve --open       # or open the local web console at http://127.0.0.1:8000
+```
 
-# build the console once (needs Node 20.9+), then serve everything with one command:
-cd web && npm install && npm run build && cd ..
-jobcut serve --open          # http://127.0.0.1:8000  (API docs at /docs)
+> The first `./jobcut serve` builds the web console automatically (one-time, needs
+> Node 20.9+). Pass `--no-build` to skip it and serve the API only.
+
+<details>
+<summary>Prefer to do it by hand (no <code>setup.sh</code>)?</summary>
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e '.[api]'      # API extra powers the web console; plain `.` is CLI-only
+jobcut init                  # scaffolds .env, profile.md, config/, searches/
+jobcut pull && jobcut score && jobcut surface
+jobcut serve --open          # builds the console on first run
 ```
 
 **Developing the console** (hot reload, two processes):
@@ -95,10 +104,11 @@ cd web && npm run dev                         # terminal 2 — Next dev on :3000
 pip install -e '.[dashboard]'
 jobcut dashboard
 ```
+</details>
 
-**Platforms.** Python 3.10+ everywhere; the console needs Node 20.9+ to build (not to
-run). macOS/Linux/Windows are supported; schedule the daily pull with launchd / cron /
-Task Scheduler — see [`scheduler/`](scheduler/).
+**Platforms.** `setup.sh` targets macOS/Linux (Python 3.10+; Node 20.9+ optional, only
+for the web console). On Windows, use WSL or the manual steps above. Schedule the daily
+pull with launchd / cron / Task Scheduler — see [`scheduler/`](scheduler/).
 
 ## Configuration
 
