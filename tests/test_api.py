@@ -1,0 +1,341 @@
+"""API tests — the FastAPI bridge over the package (TestClient, no network)."""
+
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+
+from jobcut import config, db, score
+from jobcut.api import create_app
+
+TAXONOMY = {
+    "skills": {
+        "SQL": {"cat": "core", "status": "have", "patterns": [r"\bsql\b"]},
+        "Python": {"cat": "core", "status": "have", "patterns": [r"\bpython\b"]},
+        "Power BI": {"cat": "viz", "status": "gap", "close_via": "portfolio", "patterns": [r"power ?bi"]},
+    },
+    "role_segments": {"data-analyst": ["data analyst"], "ds-ai": ["machine learning", r"\bai\b"]},
+}
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("JOBCUT_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("JOBCUT_TRACKER", raising=False)
+    config.reset_cache()
+    (tmp_path / "config").mkdir()
+    config.taxonomy_file().write_text(json.dumps(TAXONOMY))
+    (tmp_path / "searches").mkdir()
+
+    conn = db.connect()
+    rows = {}
+    for jid, title, loc, wp in [
+        ("1", "Senior Data Analyst", "Madrid, Spain", "hybrid"),
+        ("2", "Machine Learning Engineer", "European Union", "remote"),
+        ("3", "Sales Manager", "Madrid, Spain", "on_site"),
+    ]:
+        r = {c: "" for c in db.JOB_COLS}
+        r.update(job_id=jid, title=title, company_name="Acme", company_size="200",
+                 location=loc, workplace_type=wp, applicants="10",
+                 linkedin_url=f"https://www.linkedin.com/jobs/view/{jid}",
+                 description="SQL, Python and Power BI for analytics.")
+        rows[jid] = r
+    db.upsert_jobs(conn, rows, "2026-06-16")
+    score.run(conn)
+    conn.close()
+
+    yield TestClient(create_app(serve_web=False))
+    config.reset_cache()
+
+
+def test_static_console_mount(tmp_path, monkeypatch):
+    from jobcut.api.app import create_app as _create, mount_web
+
+    monkeypatch.setenv("JOBCUT_DATA_DIR", str(tmp_path / "data"))
+    config.reset_cache()
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text("<html>jobcut console</html>")
+    app = _create(serve_web=False)
+    mount_web(app, web)
+    c = TestClient(app)
+    assert "console" in c.get("/").text          # static console served at /
+    assert c.get("/api/status").status_code == 200  # API still works alongside it
+
+
+# --- health / status --------------------------------------------------------
+
+def test_status(client):
+    r = client.get("/api/status")
+    assert r.status_code == 200
+    body = r.json()
+    from jobcut import db
+    assert body["schema_version"] == db.SCHEMA_VERSION
+    assert body["jobs"] == 3
+    assert body["applications"] == 0
+    assert body["apify_token_set"] is False
+
+
+# --- shortlist + job detail -------------------------------------------------
+
+def test_shortlist(client):
+    body = client.get("/api/shortlist").json()
+    titles = [j["title"] for j in body["today"]]
+    assert "Senior Data Analyst" in titles
+    assert "Machine Learning Engineer" in titles
+    assert "Sales Manager" not in titles      # title-discarded / low score
+    assert body["meta"]["db_count"] == 3
+
+
+def test_shortlist_excludes_applied(client):
+    client.put("/api/applications/1", json={"status": "applied"})
+    titles = [j["title"] for j in client.get("/api/shortlist").json()["today"]]
+    assert "Senior Data Analyst" not in titles
+    # include_applied brings it back
+    titles2 = [j["title"] for j in client.get("/api/shortlist?include_applied=true").json()["today"]]
+    assert "Senior Data Analyst" in titles2
+
+
+def test_job_detail(client):
+    body = client.get("/api/jobs/1").json()
+    assert body["job"]["title"] == "Senior Data Analyst"
+    assert body["score"]["match_score"] >= 60
+    assert body["score"]["backend"] == "rule_based"   # score.run tags the effective backend
+    assert body["application"] is None
+    assert client.get("/api/jobs/999").status_code == 404
+
+
+def test_job_detail_application_only(client):
+    # A row the user owns (an application) with no jobs row must open (200, job:null),
+    # never 404 — so notes + status stay reachable. KR-v2-5.
+    client.put("/api/applications/777", json={"status": "interview", "notes": "manual add"})
+    r = client.get("/api/jobs/777")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["job"] is None
+    assert body["score"] is None
+    assert body["application"]["status"] == "interview"
+    assert body["application"]["notes"] == "manual add"
+    # A truly unknown id (no job, no score, no application) still 404s.
+    assert client.get("/api/jobs/888").status_code == 404
+
+
+def test_applications_list_is_enriched(client):
+    # the list endpoint joins title/company server-side so the console needs no N+1
+    client.put("/api/applications/1", json={"status": "applied"})
+    rows = client.get("/api/applications").json()
+    assert len(rows) == 1
+    assert rows[0]["job_id"] == "1"
+    assert rows[0]["title"] == "Senior Data Analyst"   # joined from jobs
+    assert "company_name" in rows[0]
+
+
+# --- applications -----------------------------------------------------------
+
+def test_applications_crud_and_funnel(client):
+    assert client.get("/api/applications").json() == []
+
+    r = client.put("/api/applications/1", json={"status": "interview", "notes": "ref by Ana"})
+    assert r.status_code == 200
+    assert r.json()["status_category"] == "Interview"
+
+    one = client.get("/api/applications/1").json()
+    assert one["notes"] == "ref by Ana" and one["status"] == "interview"
+
+    # status update preserves applied_at, refreshes status
+    applied_at = one["applied_at"]
+    client.put("/api/applications/1", json={"status": "offer"})
+    upd = client.get("/api/applications/1").json()
+    assert upd["applied_at"] == applied_at and upd["status_category"] == "Offer"
+
+    funnel = client.get("/api/applications/funnel").json()
+    assert funnel["total"] == 1 and funnel["offers"] == 1
+
+    assert client.delete("/api/applications/1").status_code == 200
+    assert client.get("/api/applications/1").status_code == 404
+    assert client.delete("/api/applications/1").status_code == 404
+
+
+def test_applications_list_serializes_null_structured_fields(client):
+    # Post-v5 the structured columns default to NULL; the list endpoint must return
+    # them as JSON null (not NaN) and never 500.
+    for jid in ("1", "2", "3"):
+        client.put(f"/api/applications/{jid}", json={"status": "applied"})
+    r = client.get("/api/applications")
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 3
+    assert all(row["priority"] is None and row["next_action"] is None for row in rows)
+
+
+def test_application_events_timeline(client):
+    # A status change lands on the timeline; a note appends without fabricating status.
+    client.put("/api/applications/1", json={"status": "applied"})
+    r = client.post("/api/applications/1/events", json={"kind": "note", "body": "called recruiter"})
+    assert r.status_code == 200
+    ev = client.get("/api/applications/1/events").json()
+    assert ev[0]["kind"] == "note" and ev[0]["body"] == "called recruiter"  # most recent first
+    assert "status_change" in [e["kind"] for e in ev]
+    # A note on a never-tracked job creates no application row (no funnel inflation).
+    client.post("/api/applications/2/events", json={"kind": "note", "body": "maybe later"})
+    assert client.get("/api/applications/2").status_code == 404
+    assert client.get("/api/applications/2/events").json()[0]["body"] == "maybe later"
+    # Unknown kinds are rejected.
+    assert client.post("/api/applications/1/events", json={"kind": "bogus"}).status_code == 422
+
+
+def test_application_patch_fields(client):
+    client.put("/api/applications/1", json={"status": "interview"})
+    r = client.patch("/api/applications/1", json={"priority": "high", "next_action": "send case",
+                                                  "next_action_date": "2026-07-01", "contact": "Ana"})
+    assert r.status_code == 200
+    a = r.json()
+    assert a["priority"] == "high" and a["next_action"] == "send case"
+    assert a["next_action_date"] == "2026-07-01" and a["contact"] == "Ana"
+    assert a["status"] == "interview"  # PATCH never touches status
+    # partial update leaves other fields intact
+    client.patch("/api/applications/1", json={"contact": "Ana Ruiz"})
+    a2 = client.get("/api/applications/1").json()
+    assert a2["contact"] == "Ana Ruiz" and a2["next_action"] == "send case"
+    # PATCH on a non-existent application 404s (never fabricates a row)
+    assert client.patch("/api/applications/999", json={"priority": "low"}).status_code == 404
+
+
+def test_applications_list_includes_stage_info(client):
+    # Each row carries time-in-stage + stalled flag (Phase 3 enrichment).
+    client.put("/api/applications/1", json={"status": "interview"})
+    rows = client.get("/api/applications").json()
+    row = next(r for r in rows if str(r["job_id"]) == "1")
+    assert "days_in_stage" in row and "stalled" in row and "dormant" in row
+    assert isinstance(row["stalled"], bool) and isinstance(row["dormant"], bool)
+
+
+def test_funnel_exposes_stalled_keys(client):
+    client.put("/api/applications/1", json={"status": "applied"})
+    f = client.get("/api/applications/funnel").json()
+    assert "stalled_count" in f and "dormant_count" in f and "by_stage_time" in f
+
+
+def test_application_statuses(client):
+    body = client.get("/api/applications/statuses").json()
+    assert "interview" in body["statuses"] and "Offer" in body["categories"]
+
+
+# --- searches ---------------------------------------------------------------
+
+def test_searches_crud(client):
+    assert client.get("/api/searches").json() == []
+    r = client.post("/api/searches", json={"name": "remote-de", "input": {"title": "data engineer"}})
+    assert r.status_code == 200
+    assert client.post("/api/searches", json={"name": "remote-de", "input": {}}).status_code == 409
+    assert client.get("/api/searches/remote-de").json()["input"]["title"] == "data engineer"
+    client.put("/api/searches/remote-de", json={"input": {"title": "ml engineer"}})
+    assert client.get("/api/searches/remote-de").json()["input"]["title"] == "ml engineer"
+    assert client.delete("/api/searches/remote-de").status_code == 200
+    assert client.get("/api/searches/remote-de").status_code == 404
+
+
+def test_search_name_validation(client):
+    assert client.get("/api/searches/..%2f..%2fetc").status_code in (400, 404)
+    assert client.post("/api/searches", json={"name": "bad name!", "input": {}}).status_code == 400
+
+
+# --- profile / config -------------------------------------------------------
+
+def test_profile_get_put(client):
+    assert client.get("/api/profile").json()["content"] == ""
+    client.put("/api/profile", json={"content": "# Me\nData analyst"})
+    assert "Data analyst" in client.get("/api/profile").json()["content"]
+
+
+def test_config_get_put(client):
+    cfg = client.get("/api/config").json()
+    assert cfg["scoring"]["backend"] == "rule_based"
+    client.put("/api/config", json={"config": {"scoring": {"out_of_profile_cap": 25}}})
+    assert client.get("/api/config").json()["scoring"]["out_of_profile_cap"] == 25
+
+
+def test_config_put_preserves_other_keys(client):
+    # Saving one nested key must not wipe sibling overrides (weights vs backend).
+    client.put("/api/config", json={"config": {"scoring": {"backend": "local"}}})
+    client.put("/api/config", json={"config": {"scoring": {"out_of_profile_cap": 25}}})
+    cfg = client.get("/api/config").json()
+    assert cfg["scoring"]["backend"] == "local"  # not clobbered by the second save
+    assert cfg["scoring"]["out_of_profile_cap"] == 25
+
+
+def test_cv_extract_and_from_cv(client):
+    r = client.post("/api/cv/extract", files={"file": ("cv.txt", b"Senior Nurse, ACLS", "text/plain")})
+    assert r.status_code == 200
+    assert r.json()["text"] == "Senior Nurse, ACLS"
+
+    draft = client.post("/api/profile/from-cv", json={"text": "Senior Nurse, ACLS"}).json()
+    assert draft["source"] == "scaffold"            # no LLM configured
+    assert "## Target roles" in draft["profile_md"]
+
+
+def test_cv_extract_unsupported(client):
+    r = client.post("/api/cv/extract", files={"file": ("cv.rtf", b"x", "application/rtf")})
+    assert r.status_code == 422
+
+
+def test_profile_derive(client):
+    client.put("/api/profile", json={"content": (
+        "## Target roles\n- Marketing Manager\n\n## Core skills\n- SEO\n- Content strategy\n\n"
+        "## Location & work mode\n- Based in: Berlin, Germany\n- Remote: yes\n"
+    )})
+    derived = client.get("/api/profile/derived").json()
+    assert "Marketing Manager" in derived["searches"][next(iter(derived["searches"]))]["jobTitles"]
+    assert "remote" in derived["searches"]                 # Remote: yes -> remote search
+    assert "SEO" in derived["taxonomy"]["skills"]
+
+    report = client.post("/api/profile/derive", json={"force": True}).json()
+    assert report["written"]
+    # the written config now drives include_titles (role-agnostic)
+    import re
+    inc = client.get("/api/config").json()["filter"]["include_titles"]
+    assert re.search(inc, "Marketing Manager", re.I)
+
+
+# --- credentials ------------------------------------------------------------
+
+def test_credentials_put_and_validate(client):
+    assert client.get("/api/credentials").json()["apify_token_set"] is False
+    client.put("/api/credentials", json={"apify_token": "apify_api_realish"})
+    assert client.get("/api/credentials").json()["apify_token_set"] is True
+    # empty/missing token validates as invalid without any network call
+    v = client.post("/api/validate-credentials", json={}).json()
+    assert v["apify"]["valid"] is False
+
+
+# --- market -----------------------------------------------------------------
+
+def test_market(client):
+    body = client.get("/api/market").json()
+    assert body["total"] == 3
+    assert body["relevant"] >= 1
+    assert "salary_pct" in body
+
+
+def test_export(client):
+    body = client.post("/api/export").json()
+    assert body["summary"]["total_jobs"] == 3
+    assert body["out_dir"]
+
+
+# --- runs + SSE -------------------------------------------------------------
+
+def test_run_score_streams_to_done(client):
+    rid = client.post("/api/runs", json={"kind": "score"}).json()["run_id"]
+    with client.stream("GET", f"/api/runs/{rid}/events") as resp:
+        body = "".join(resp.iter_text())
+    assert "event: done" in body
+    assert client.get(f"/api/runs/{rid}").json()["status"] == "done"
+
+
+def test_run_pull_trigger_requires_confirm(client):
+    r = client.post("/api/runs", json={"kind": "pull", "mode": "trigger"})
+    assert r.status_code == 409
+    # read mode does not need confirmation (guard only blocks the paid path)
+    r2 = client.post("/api/runs", json={"kind": "pull", "mode": "trigger", "confirm": True})
+    assert r2.status_code == 200

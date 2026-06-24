@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+/* ───────────────────────────────────────────────────────────────────────────
+   jobcut theme tokens — D1, derived from the Stitch design system
+   (docs/assets/stitch/.../jobcut_design_system/DESIGN.md + the rendered
+   code.html, which is the tiebreaker). Light theme only (dark-mode is later).
+   ─────────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Surfaces: soft off-white canvas, pure-white cards (depth via tone, not lines). */
+  --color-bg: #f8f9ff;            /* page background */
+  --color-surface: #ffffff;       /* cards / panels */
+  --color-surface-alt: #eff4ff;   /* subtle fill: hovers, segmented controls */
+  --color-surface-sunken: #e5eeff;
+  --color-on-surface: #0b1c30;    /* primary text */
+  --color-on-surface-variant: #51606f; /* secondary text / metadata */
+  --color-on-surface-faint: #8a96a3;   /* tertiary text / hints */
+  --color-border: #e2e8f0;        /* soft input/card borders */
+
+  /* Primary green. Tiebreaker: the rendered code.html uses #16A34A for buttons,
+     the score ring and input focus; #006b2c (primary-strong) is only the brand
+     wordmark. We standardize on #16A34A as the primary action color. */
+  --color-primary: #16a34a;
+  --color-primary-hover: #00873a;     /* code.html hover:bg-primary-container */
+  --color-on-primary: #ffffff;
+  --color-primary-strong: #006b2c;    /* brand wordmark / active nav */
+  --color-primary-tint: #eafaf0;      /* soft primary background for chips */
+
+  /* Match-score scale: high green / mid amber / low gray (DESIGN.md). */
+  --color-score-high: #16a34a;
+  --color-score-mid: #d97706;
+  --color-score-low: #6e7b6c;
+
+  /* Status accents, tuned for legibility on white. */
+  --color-accent-blue: #2563eb;
+  --color-accent-amber: #d97706;
+  --color-accent-red: #dc2626;
+  --color-accent-purple: #7c3aed;
+  --color-accent-cyan: #0891b2;
+
+  /* Radii: cards 14px, buttons/inputs 8px (rounded-lg), chips/score full. */
+  --radius-card: 14px;
+
+  /* Elevation: soft ambient card shadow (Depth Level 1). */
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.03);
+  --shadow-pop: 0 10px 24px rgba(0, 0, 0, 0.06);
+
+  /* Typography: Inter (next/font, self-hosted — set via --font-inter in layout). */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* ── Legacy aliases (the components were built on a GitHub-dark palette).
+     Remapped to the light theme so every existing primitive — buttons, cards,
+     inputs, selects, badges — picks up the new theme without a rewrite. ── */
+  --color-canvas: var(--color-bg);
+  --color-panel: var(--color-surface);
+  --color-panel2: var(--color-surface-alt);
+  --color-line: var(--color-border);
+  --color-fg: var(--color-on-surface);
+  --color-muted: var(--color-on-surface-variant);
+  --color-dim: var(--color-on-surface-faint);
+  --color-green: var(--color-primary);
+  --color-blue: var(--color-accent-blue);
+  --color-amber: var(--color-accent-amber);
+  --color-red: var(--color-accent-red);
+  --color-purple: var(--color-accent-purple);
+  --color-cyan: var(--color-accent-cyan);
+}
+
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+a {
+  color: inherit;
+}
+
+/* ── D2 polish ──────────────────────────────────────────────────────────── */
+
+/* Accessible keyboard focus: a visible primary ring (only for keyboard nav). */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Skeleton shimmer for loading placeholders (see components/States.tsx). */
+@keyframes jp-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, #ffffff 55%, transparent), transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton::after {
+    animation: jp-shimmer 1.5s infinite;
+  }
+  /* Subtle, consistent press feedback on any enabled button. */
+  button:not(:disabled):active {
+    transform: translateY(1px);
+  }
+}

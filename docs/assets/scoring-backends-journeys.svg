@@ -1,0 +1,91 @@
+<svg viewBox="0 0 1000 660" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" role="img">
+  <title>Comparación de los cuatro backends de scoring por user journey</title>
+  <desc>Cuatro opciones —rule_based, local con Ollama, api con key propia, y agent con suscripción de Claude— comparadas por quién dispara, dónde corre el LLM, el rol del dashboard, el costo y para quién. En las tres primeras el dashboard es nativo y puntúas ahí mismo; en la de suscripción el scoring corre fuera (Claude Code/Cowork) y el dashboard solo muestra resultados.</desc>
+
+  <rect x="0" y="0" width="1000" height="660" fill="#ffffff"/>
+
+  <!-- legend -->
+  <g font-size="12.5">
+    <rect x="150" y="16" width="13" height="13" rx="3" fill="#16a34a"/>
+    <text x="169" y="27" fill="#555555">Dashboard nativo — puntúas ahí mismo</text>
+    <rect x="560" y="16" width="13" height="13" rx="3" fill="#d97706"/>
+    <text x="579" y="27" fill="#555555">Scoring externo — dashboard solo muestra</text>
+  </g>
+
+  <!-- row label column -->
+  <g font-size="12.5" font-weight="600" fill="#555555" text-anchor="end">
+    <text x="138" y="135">Disparador</text>
+    <text x="138" y="215">El LLM corre en</text>
+    <text x="138" y="295">Rol del dashboard</text>
+    <text x="138" y="375">Costo por uso</text>
+    <text x="138" y="455">Para quién</text>
+  </g>
+
+  <!-- ===== column headers ===== -->
+  <rect x="150" y="48" width="195" height="46" rx="9" fill="#16a34a" opacity="0.14"/>
+  <rect x="150" y="48" width="6" height="46" rx="3" fill="#16a34a"/>
+  <text x="247" y="70" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1a1a1a">rule_based</text>
+  <text x="247" y="87" text-anchor="middle" font-size="11.5" fill="#666666">sin LLM</text>
+
+  <rect x="353" y="48" width="195" height="46" rx="9" fill="#16a34a" opacity="0.14"/>
+  <rect x="353" y="48" width="6" height="46" rx="3" fill="#16a34a"/>
+  <text x="450" y="70" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1a1a1a">local</text>
+  <text x="450" y="87" text-anchor="middle" font-size="11.5" fill="#666666">Ollama / modelo abierto</text>
+
+  <rect x="556" y="48" width="195" height="46" rx="9" fill="#16a34a" opacity="0.14"/>
+  <rect x="556" y="48" width="6" height="46" rx="3" fill="#16a34a"/>
+  <text x="653" y="70" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1a1a1a">api</text>
+  <text x="653" y="87" text-anchor="middle" font-size="11.5" fill="#666666">key propia</text>
+
+  <rect x="759" y="48" width="195" height="46" rx="9" fill="#d97706" opacity="0.16"/>
+  <rect x="759" y="48" width="6" height="46" rx="3" fill="#d97706"/>
+  <text x="856" y="70" text-anchor="middle" font-size="14.5" font-weight="700" fill="#1a1a1a">agent</text>
+  <text x="856" y="87" text-anchor="middle" font-size="11.5" fill="#666666">suscripción Claude</text>
+
+  <!-- row separators -->
+  <g stroke="#e5e5e5" stroke-width="1">
+    <line x1="150" y1="104" x2="954" y2="104"/>
+    <line x1="150" y1="184" x2="954" y2="184"/>
+    <line x1="150" y1="264" x2="954" y2="264"/>
+    <line x1="150" y1="344" x2="954" y2="344"/>
+    <line x1="150" y1="424" x2="954" y2="424"/>
+    <line x1="150" y1="504" x2="954" y2="504"/>
+  </g>
+
+  <!-- ===== cells ===== -->
+  <g font-size="12.5" text-anchor="middle" fill="#1a1a1a">
+    <text x="247" y="139">Botón o cron</text>
+    <text x="450" y="139">Botón o cron</text>
+    <text x="653" y="139">Botón o cron</text>
+    <text x="856" y="139" font-weight="600" fill="#b45309">Tarea en Cowork</text>
+
+    <text x="247" y="219" fill="#666666">— (Python)</text>
+    <text x="450" y="219">Tu máquina</text>
+    <text x="653" y="219">Servidor del proveedor</text>
+    <text x="856" y="219" font-weight="600" fill="#b45309">Claude Code / Cowork</text>
+
+    <text x="247" y="299" fill="#15803d">Nativo · en vivo</text>
+    <text x="450" y="299" fill="#15803d">Nativo · en vivo</text>
+    <text x="653" y="299" fill="#15803d">Nativo · en vivo</text>
+    <text x="856" y="299" font-weight="600" fill="#b45309">Visor (refresh)</text>
+
+    <text x="247" y="379" font-weight="600">$0</text>
+    <text x="450" y="379" font-weight="600">$0 / llamada</text>
+    <text x="653" y="379" font-weight="600">~$0.001 / oferta</text>
+    <text x="856" y="379" font-weight="600">$0 (tu plan)</text>
+  </g>
+
+  <g font-size="12" text-anchor="middle" fill="#555555">
+    <text x="247" y="451">Todos</text><text x="247" y="467">(el piso)</text>
+    <text x="450" y="451">LLM gratis,</text><text x="450" y="467">sin suscripción</text>
+    <text x="653" y="451">Calidad frontier,</text><text x="653" y="467">paga centavos</text>
+    <text x="856" y="451">Suscriptor de</text><text x="856" y="467">Claude (+ CLI)</text>
+  </g>
+
+  <!-- footer note -->
+  <rect x="20" y="540" width="934" height="98" rx="11" fill="#f1f0ec"/>
+  <text x="40" y="568" font-size="13.5" font-weight="700" fill="#1a1a1a">Dos cosas que definen la decisión</text>
+  <text x="40" y="592" font-size="12.5" fill="#555555">• SQLite es siempre el almacén: las cuatro escriben la MISMA tabla scores. El usuario solo cambia scoring.backend en config.</text>
+  <text x="40" y="613" font-size="12.5" fill="#555555">• ChatGPT Plus NO sirve para la columna agent (no hay agente local sobre suscripción) → ese usuario usa local o api.</text>
+  <text x="40" y="632" font-size="11.5" fill="#777777">Recomendación OSS: rule_based + local como héroes gratis · api para calidad premium · agent es tu vía con Claude Max.</text>
+</svg>

@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy to config/config.json and edit. Only the keys you override matter — anything you omit falls back to jobcut's built-in defaults. Regexes are case-insensitive (ES+EN). The 'routing' values are an EXAMPLE — set your own geography.",
+  "routing": {
+    "home": "\\b(spain|espa[nñ]a|madrid|barcelona|valencia|seville|sevilla|m[aá]laga|bilbao)\\b",
+    "region": "(european union|european economic area|\\beea\\b|\\bemea\\b|^europe$|^eu$)"
+  },
+  "filter": {
+    "include_titles": "(data analyst|data scien|analytics|business intelligence|\\bbi\\b|product analyst|business analyst|data engineer|machine learning|\\bml\\b|\\bai\\b|artificial intelligence|insight|reporting analyst|decision scien|quantitative|growth analyst|marketing analyst|crm analyst|data ?& ?ai|data and ai|datos|anal[ií]st|cient[ií]fic|ingenier[oa] de datos|inteligencia artificial|aprendizaje autom)"
+  },
+  "scoring": {
+    "backend": "rule_based",
+    "weights": {
+      "title": 30,
+      "stack": 20,
+      "location": 15,
+      "signals": 10,
+      "employer": 10,
+      "reachable": 10,
+      "dealbreaker": -20
+    },
+    "signals": [],
+    "dealbreakers": [],
+    "out_of_profile_cap": 30
+  }
+}

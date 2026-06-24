@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd template for a daily jobcut run.
+
+  SETUP:
+    1. Replace every {{...}} placeholder below with absolute paths for YOUR machine.
+    2. Copy to ~/Library/LaunchAgents/com.example.jobcut.plist
+    3. Load it:   launchctl load ~/Library/LaunchAgents/com.example.jobcut.plist
+
+  {{JOBCUT_BIN}}  = output of `which jobcut` (e.g. /Users/you/.venv/bin/jobcut)
+  {{DATA_DIR}}      = your data dir (holds searches/, config/, the .db and out/)
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.example.jobcut</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{JOBCUT_BIN}}</string>
+        <string>pull</string>
+        <string>--read</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>{{DATA_DIR}}</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>JOBCUT_DATA_DIR</key>
+        <string>{{DATA_DIR}}</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>7</integer>
+        <key>Minute</key><integer>20</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{{DATA_DIR}}/jobcut.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{DATA_DIR}}/jobcut.err.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

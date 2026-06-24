@@ -1,0 +1,7 @@
+{
+  "_note": "LinkedIn geoIds for the harvestapi/linkedin-job-search actor, keyed by a normalized (lowercased, single-spaced) location name. ONLY verified values belong here — NEVER guess a geoId: an invented id returns empty results silently. To extend: open a LinkedIn jobs search for the place and copy the geoId from the URL (the number after geoId=), then add it (and any aliases). Unresolved locations fall back to the search's manual geo_ids[] override, and if there's none the search is flagged needs_geoid (it is not run with a bogus id).",
+  "geoids": {
+    "european economic area": "91000000",
+    "eea": "91000000"
+  }
+}

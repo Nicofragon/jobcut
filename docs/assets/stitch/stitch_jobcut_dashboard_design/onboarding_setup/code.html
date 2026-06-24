@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Let's set up your job hunt - JobCut</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-highest": "#d3e4fe",
+                    "tertiary-container": "#c74668",
+                    "surface-bright": "#f8f9ff",
+                    "tertiary-fixed-dim": "#ffb2bf",
+                    "surface-container-lowest": "#ffffff",
+                    "tertiary-fixed": "#ffd9de",
+                    "on-secondary-fixed": "#2f1500",
+                    "on-error": "#ffffff",
+                    "on-secondary-fixed-variant": "#6e3900",
+                    "secondary": "#904d00",
+                    "outline": "#6e7b6c",
+                    "inverse-surface": "#213145",
+                    "primary-fixed-dim": "#62df7d",
+                    "on-primary-fixed-variant": "#005320",
+                    "tertiary": "#a72d51",
+                    "surface-container-low": "#eff4ff",
+                    "surface-container": "#e5eeff",
+                    "on-surface": "#0b1c30",
+                    "surface-dim": "#cbdbf5",
+                    "surface-variant": "#d3e4fe",
+                    "secondary-fixed": "#ffdcc3",
+                    "background": "#f8f9ff",
+                    "outline-variant": "#bdcaba",
+                    "surface-tint": "#006e2d",
+                    "error": "#ba1a1a",
+                    "on-tertiary-fixed-variant": "#8a143c",
+                    "surface-container-high": "#dce9ff",
+                    "on-secondary": "#ffffff",
+                    "on-primary": "#ffffff",
+                    "secondary-container": "#fe932c",
+                    "inverse-on-surface": "#eaf1ff",
+                    "inverse-primary": "#62df7d",
+                    "on-surface-variant": "#3e4a3d",
+                    "on-secondary-container": "#663500",
+                    "error-container": "#ffdad6",
+                    "primary": "#006b2c",
+                    "primary-fixed": "#7ffc97",
+                    "on-background": "#0b1c30",
+                    "on-tertiary-container": "#fffbff",
+                    "on-error-container": "#93000a",
+                    "on-primary-fixed": "#002109",
+                    "on-primary-container": "#f7fff2",
+                    "primary-container": "#00873a",
+                    "on-tertiary-fixed": "#3f0016",
+                    "on-tertiary": "#ffffff",
+                    "secondary-fixed-dim": "#ffb77d",
+                    "surface": "#f8f9ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "8px",
+                    "lg": "24px",
+                    "md": "16px",
+                    "xl": "32px",
+                    "xs": "4px",
+                    "sm": "12px",
+                    "gutter": "16px",
+                    "xxl": "48px",
+                    "container-margin": "24px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-lg-mobile": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "headline-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #bdcaba;
+            border-radius: 20px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9ff;
+            color: #0b1c30;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col items-center justify-center p-gutter md:p-container-margin custom-scrollbar">
+<!-- Top Navigation Omitted - Onboarding is a linear/transactional flow -->
+<main class="w-full max-w-3xl bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container overflow-hidden flex flex-col shadow-[0px_4px_12px_rgba(0,0,0,0.03)]">
+<!-- Header Section -->
+<div class="px-lg pt-xl pb-md text-center">
+<h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-xs">Let's set up your job hunt</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">From zero to your first ranked shortlist — everything stays on your computer.</p>
+</div>
+<!-- Progress Indicator -->
+<div class="px-lg py-md border-b border-surface-container-high bg-surface">
+<div class="flex items-center justify-between relative max-w-xl mx-auto">
+<div class="absolute left-0 top-1/2 -translate-y-1/2 w-full h-0.5 bg-surface-container-highest z-0"></div>
+<div class="absolute left-0 top-1/2 -translate-y-1/2 w-[25%] h-0.5 bg-primary z-0 transition-all duration-500"></div>
+<!-- Step 1: Connect (Completed) -->
+<div class="flex flex-col items-center z-10 gap-xs">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px]">check</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Connect</span>
+</div>
+<!-- Step 2: Profile (Active) -->
+<div class="flex flex-col items-center z-10 gap-xs">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center ring-4 ring-surface shadow-sm">
+<span class="font-label-sm text-label-sm">2</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary font-bold">Profile</span>
+</div>
+<!-- Step 3: Searches -->
+<div class="flex flex-col items-center z-10 gap-xs">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center shadow-sm">
+<span class="font-label-sm text-label-sm">3</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Searches</span>
+</div>
+<!-- Step 4: Scoring -->
+<div class="flex flex-col items-center z-10 gap-xs">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center shadow-sm">
+<span class="font-label-sm text-label-sm">4</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Scoring</span>
+</div>
+<!-- Step 5: First run -->
+<div class="flex flex-col items-center z-10 gap-xs">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center shadow-sm">
+<span class="font-label-sm text-label-sm">5</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">First run</span>
+</div>
+</div>
+</div>
+<!-- Form Content Canvas -->
+<div class="p-lg md:p-xl flex-grow space-y-xl bg-surface-bright">
+<!-- Target Roles Section -->
+<div class="space-y-base">
+<label class="font-label-md text-label-md text-on-surface block">Target roles</label>
+<div class="border border-outline-variant focus-within:border-primary focus-within:ring-1 focus-within:ring-primary rounded-lg p-sm bg-surface-container-lowest transition-all duration-200">
+<div class="flex flex-wrap gap-base items-center">
+<!-- Chips -->
+<div class="flex items-center gap-xs bg-surface-container text-on-surface font-label-sm text-label-sm px-sm py-xs rounded-full">
+                            Frontend Developer
+                            <button class="hover:text-error transition-colors focus:outline-none flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<div class="flex items-center gap-xs bg-surface-container text-on-surface font-label-sm text-label-sm px-sm py-xs rounded-full">
+                            UI Engineer
+                            <button class="hover:text-error transition-colors focus:outline-none flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<!-- Input -->
+<input class="flex-grow border-none focus:ring-0 p-0 font-body-md text-body-md text-on-surface bg-transparent min-w-[200px] placeholder-on-surface-variant opacity-70" placeholder="Type a role and press enter..." type="text"/>
+</div>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-xs">We'll use these to filter out irrelevant listings.</p>
+</div>
+<!-- Preferred Locations Section -->
+<div class="space-y-base">
+<label class="font-label-md text-label-md text-on-surface block">Preferred locations</label>
+<div class="flex flex-wrap gap-sm">
+<button class="px-md py-base rounded-full border border-primary bg-primary-container text-on-primary-container font-label-sm text-label-sm transition-colors hover:bg-primary hover:text-on-primary shadow-sm flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+                        London, UK
+                    </button>
+<button class="px-md py-base rounded-full border border-outline-variant bg-surface-container-lowest text-on-surface-variant font-label-sm text-label-sm transition-colors hover:bg-surface-container hover:text-on-surface shadow-sm flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]">add</span>
+                        Add location
+                    </button>
+</div>
+</div>
+<!-- Work Type Segmented Control -->
+<div class="space-y-base">
+<label class="font-label-md text-label-md text-on-surface block">Work type</label>
+<div class="bg-surface-container p-xs rounded-lg inline-flex shadow-inner w-full md:w-auto">
+<button class="flex-1 md:flex-none px-lg py-sm rounded-md bg-surface-container-lowest text-on-surface font-label-md text-label-md shadow-sm transition-all text-center">Remote</button>
+<button class="flex-1 md:flex-none px-lg py-sm rounded-md text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-high transition-all text-center">Hybrid</button>
+<button class="flex-1 md:flex-none px-lg py-sm rounded-md text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-high transition-all text-center">On-site</button>
+</div>
+</div>
+<!-- CV Upload Area -->
+<div class="space-y-base mt-lg">
+<label class="font-label-md text-label-md text-on-surface block">Upload your CV</label>
+<div class="border-2 border-dashed border-outline-variant hover:border-primary bg-surface-container-lowest rounded-xl p-xl flex flex-col items-center justify-center text-center cursor-pointer transition-colors group relative overflow-hidden">
+<div class="absolute inset-0 bg-primary opacity-0 group-hover:opacity-5 transition-opacity"></div>
+<div class="w-16 h-16 rounded-full bg-surface-container-highest flex items-center justify-center mb-md group-hover:scale-110 transition-transform shadow-sm text-primary">
+<span class="material-symbols-outlined text-[32px]">cloud_upload</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-xs">Drag &amp; drop your CV here</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-md">PDF, DOCX, or TXT up to 5MB</p>
+<button class="px-md py-base rounded border border-outline text-on-surface font-label-md text-label-md hover:bg-surface-container transition-colors shadow-sm bg-surface-container-lowest">
+                         Browse files
+                     </button>
+</div>
+</div>
+<!-- Reassurance Microcopy -->
+<div class="flex items-center justify-center gap-xs text-on-surface-variant bg-surface-container-low p-sm rounded-lg border border-surface-container-highest shadow-sm mt-lg">
+<span class="material-symbols-outlined text-[18px] text-primary">lock</span>
+<span class="font-label-sm text-label-sm">100% local — your data never leaves your computer.</span>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="px-lg py-md border-t border-surface-container bg-surface flex items-center justify-between gap-md rounded-b-xl flex-wrap-reverse md:flex-nowrap">
+<button class="px-md py-sm text-on-surface-variant font-label-md text-label-md hover:bg-surface-container rounded transition-colors w-full md:w-auto text-center">
+                Back
+            </button>
+<div class="flex gap-md w-full md:w-auto justify-end">
+<button class="px-md py-sm text-on-surface-variant font-label-md text-label-md hover:bg-surface-container rounded transition-colors flex-1 md:flex-none text-center">
+                    Skip setup
+                </button>
+<button class="px-md py-sm bg-primary text-on-primary font-label-md text-label-md rounded shadow-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-xs flex-1 md:flex-none text-center whitespace-nowrap px-[16px]">
+                    Next step
+                    <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</main>
+</body></html>

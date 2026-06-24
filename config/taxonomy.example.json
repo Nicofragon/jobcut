@@ -1,0 +1,29 @@
+{
+  "_comment": "Copy to config/taxonomy.json and edit. 'status' is how YOU stand on each skill: have = you can do it | partial = some exposure | gap = you don't have it. 'close_via' = how you'd close a gap (course | portfolio | cv-reframe | skip). 'patterns' = case-insensitive regex matched against job title + description (add your languages). 'role_segments' classify a job by title for the market report. All values below are generic placeholders — make them yours.",
+  "skills": {
+    "SQL":        { "cat": "core",      "status": "have",    "patterns": ["\\bsql\\b"] },
+    "Python":     { "cat": "core",      "status": "have",    "patterns": ["\\bpython\\b", "pandas", "numpy"] },
+    "Excel":      { "cat": "core",      "status": "have",    "patterns": ["\\bexcel\\b"] },
+    "R":          { "cat": "core",      "status": "gap",     "close_via": "skip",       "patterns": ["\\br programming\\b", "\\bin r\\b"] },
+    "Tableau":    { "cat": "viz",       "status": "partial", "close_via": "portfolio",  "patterns": ["tableau"] },
+    "Power BI":   { "cat": "viz",       "status": "gap",     "close_via": "portfolio",  "patterns": ["power ?bi", "\\bdax\\b"] },
+    "Looker":     { "cat": "viz",       "status": "gap",     "close_via": "cv-reframe", "patterns": ["looker"] },
+    "dbt":        { "cat": "dataeng",   "status": "gap",     "close_via": "portfolio",  "patterns": ["\\bdbt\\b"] },
+    "Airflow":    { "cat": "dataeng",   "status": "gap",     "close_via": "portfolio",  "patterns": ["airflow"] },
+    "Spark":      { "cat": "dataeng",   "status": "gap",     "close_via": "course",     "patterns": ["py?spark"] },
+    "ETL":        { "cat": "dataeng",   "status": "have",    "patterns": ["\\betls?\\b", "data pipelines?"] },
+    "Snowflake":  { "cat": "warehouse", "status": "gap",     "close_via": "course",     "patterns": ["snowflake"] },
+    "BigQuery":   { "cat": "warehouse", "status": "partial", "close_via": "portfolio",  "patterns": ["big ?query"] },
+    "Databricks": { "cat": "warehouse", "status": "gap",     "close_via": "course",     "patterns": ["databricks"] },
+    "A/B testing":{ "cat": "method",    "status": "have",    "patterns": ["a/?b test", "experimentation", "hypothesis test"] },
+    "Statistics": { "cat": "method",    "status": "have",    "patterns": ["statistic", "regression", "inference"] },
+    "Machine Learning": { "cat": "ml",  "status": "partial", "close_via": "portfolio",  "patterns": ["machine learning", "\\bml\\b", "scikit"] },
+    "LLM / GenAI":{ "cat": "ml",        "status": "partial", "close_via": "portfolio",  "patterns": ["\\bllm\\b", "genai", "generative ai", "\\brag\\b", "prompt"] }
+  },
+  "role_segments": {
+    "data-analyst":    ["data analyst", "analista de datos", "data analytics", "bi analyst"],
+    "product-analyst": ["product analyst", "product data", "digital analytics", "\\bcro\\b"],
+    "ds-ai":           ["data scientist", "machine learning", "ml engineer", "\\bai\\b", "\\bml\\b"],
+    "analytics-eng":   ["analytics engineer", "data engineer", "analytics engineering"]
+  }
+}

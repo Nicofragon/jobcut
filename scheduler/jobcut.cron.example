@@ -1,0 +1,12 @@
+# Linux cron template for a daily jobcut run.
+#
+# SETUP:
+#   1. Replace the placeholders with your absolute paths.
+#   2. Install:  crontab -e   (paste the line below)
+#
+#   {{JOBCUT_BIN}} = output of `which jobcut` (e.g. /home/you/.venv/bin/jobcut)
+#   {{DATA_DIR}}     = your data dir (holds searches/, config/, the .db and out/)
+#
+# Runs every day at 07:20. Use `pull` (no --read) only when you intend a paid scrape.
+
+20 7 * * *  JOBCUT_DATA_DIR={{DATA_DIR}} {{JOBCUT_BIN}} pull --read >> {{DATA_DIR}}/jobcut.log 2>&1

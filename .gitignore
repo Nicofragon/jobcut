@@ -1,0 +1,67 @@
+# --- Secrets ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Live data (never commit) ----------------------------------------------
+# SQLite is the canonical data store; xlsx/csv are exports. None belong in git.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.xlsx
+*.csv
+out/
+batches/
+raw/
+demo-data/
+.e2e-data/
+last_runs.json
+_score_meta.json
+
+# --- Personal config (ship only the .example.* variants) -------------------
+profile.md
+config/taxonomy.json
+config/config.json
+# Your real saved searches reveal your targeting. Ship example-*.json only.
+searches/*.json
+!searches/example-*.json
+
+# --- Logs ------------------------------------------------------------------
+*.log
+
+# --- Internal planning (master roadmap; kept local, has personal paths) -----
+docs/PLAN.md
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# --- OS / editor -----------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+
+# --- Claude isolated config-home (CLAUDE_CONFIG_DIR) ------------------------
+# Holds credentials, plugin cache, and session history. Never commit.
+/.claude-env/
+
+# --- Local-only tooling & scratch (kept out of the public repo) ------------
+# Per-machine Claude config/skills, MCP browser dumps, local binaries, dev
+# scripts and QA screenshots. The shippable Claude skills live in
+# integrations/cowork/skills/ instead.
+.claude/
+.playwright-mcp/
+bin/
+scripts/
+screenshots_versions/
+screenshots_dashboard/
