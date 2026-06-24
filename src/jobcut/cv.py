@@ -29,14 +29,20 @@ def extract_text(filename: str, data: bytes) -> str:
             import pypdf
         except ImportError as e:
             raise CvError("PDF support needs `pip install jobcut[cv]` — or paste the text instead.") from e
-        reader = pypdf.PdfReader(io.BytesIO(data))
-        return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+        try:
+            reader = pypdf.PdfReader(io.BytesIO(data))
+            return "\n".join((page.extract_text() or "") for page in reader.pages).strip()
+        except Exception as e:  # corrupt / encrypted / image-only PDF
+            raise CvError("Couldn't read that PDF — it may be corrupt or image-only. Paste the text instead.") from e
     if ext == "docx":
         try:
             import docx
         except ImportError as e:
             raise CvError("DOCX support needs `pip install jobcut[cv]` — or paste the text instead.") from e
-        return "\n".join(p.text for p in docx.Document(io.BytesIO(data)).paragraphs).strip()
+        try:
+            return "\n".join(p.text for p in docx.Document(io.BytesIO(data)).paragraphs).strip()
+        except Exception as e:  # corrupt / not a real .docx
+            raise CvError("Couldn't read that DOCX — it may be corrupt. Paste the text instead.") from e
     raise CvError(f"unsupported file type '.{ext}' — use txt, md, pdf or docx, or paste the text.")
 
 

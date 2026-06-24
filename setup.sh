@@ -34,7 +34,8 @@ fi
 
 say "Installing jobcut and its dependencies…"
 ./.venv/bin/python -m pip install --upgrade pip -q
-./.venv/bin/python -m pip install -e '.[api]' -q
+# api = web console · cv = read PDF/DOCX CVs · llm = optional AI scoring/CV auto-fill
+./.venv/bin/python -m pip install -e '.[api,cv,llm]' -q
 
 # 3) Web console — build automatically if Node is present (the CLI works without it)
 if command -v npm >/dev/null 2>&1; then

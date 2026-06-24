@@ -158,7 +158,8 @@ def validate_credentials(body: CredentialsIn):
         try:
             from apify_client import ApifyClient
             user = ApifyClient(body.apify_token).user().get()
-            result["apify"] = {"valid": True, "username": (user or {}).get("username")}
+            # apify-client 3.x returns a typed UserPrivateInfo object (not a dict).
+            result["apify"] = {"valid": True, "username": getattr(user, "username", None)}
         except Exception as exc:
             result["apify"] = {"valid": False, "error": str(exc)}
     # An LLM key can't be checked without a (billable) call; treat presence as valid-ish.

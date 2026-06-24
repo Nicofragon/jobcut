@@ -186,11 +186,22 @@ export default function OnboardingPage() {
     setError(null);
     try {
       const { text } = await extractCv(file);
-      const { profile_md } = await draftProfile(text); // needs an LLM key
-      await putProfile(profile_md); // write the draft, then read it back as structured fields
-      setFields(await getProfileStructured());
-    } catch {
-      setError("Couldn't auto-fill from your CV (that needs an LLM key in Connect). You can fill the fields below by hand.");
+      const { profile_md, source } = await draftProfile(text);
+      if (source === "ai") {
+        // Only the AI draft has structured content worth filling the form with.
+        await putProfile(profile_md);
+        setFields(await getProfileStructured());
+      } else {
+        // No LLM key: we read the CV but can't fill the fields. Don't overwrite the
+        // profile silently — tell the user the truth and let them fill it in.
+        setError("We read your CV, but filling the fields automatically needs an LLM key (add it in Connect). Fill them in below — it only takes a minute.");
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 422) {
+        setError(e.message); // the backend's real reason (unsupported/corrupt file, missing support)
+      } else {
+        setError("Couldn't read your CV — make sure jobcut is running. You can fill the fields below by hand.");
+      }
     } finally {
       setCvBusy("");
     }
@@ -299,10 +310,15 @@ function Connect({
   setValidation: (v: Validation | null) => void;
 }) {
   const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
   async function check() {
     setChecking(true);
+    setCheckError(null);
     try {
       setValidation(await validateCredentials({ apify_token: apify, llm_key: llm || undefined }));
+    } catch {
+      setValidation(null);
+      setCheckError("Couldn't run the check — make sure jobcut is running, then try again.");
     } finally {
       setChecking(false);
     }
@@ -337,6 +353,12 @@ function Connect({
             {validation.apify.valid
               ? `Connected${validation.apify.username ? ` as ${validation.apify.username}` : ""}`
               : "Couldn't connect — check the token"}
+          </span>
+        )}
+        {checkError && (
+          <span className="inline-flex items-center gap-1.5 text-sm" style={{ color: "var(--color-accent-red)" }}>
+            <Icon name="x" size={16} />
+            {checkError}
           </span>
         )}
       </div>
@@ -378,7 +400,7 @@ function Profile({
         </span>
         <span className="font-semibold text-on-surface">{cvBusy || "Upload your CV"}</span>
         <span className="mt-0.5 text-sm text-on-surface-variant">
-          PDF, DOCX or TXT{hasLlm ? "" : " · add an LLM key in Connect to auto-fill"}
+          PDF, DOCX or TXT — {hasLlm ? "we'll auto-fill the fields below" : "add an LLM key in Connect to auto-fill; otherwise fill the fields by hand"}
         </span>
       </label>
 
