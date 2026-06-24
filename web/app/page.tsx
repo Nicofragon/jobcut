@@ -47,12 +47,15 @@ export default function HomePage() {
     if (typeof window !== "undefined") window.localStorage.setItem("jp_min_score", String(v));
   }
 
-  // First run (no token, no jobs) → onboarding, unless the user dismissed it.
+  // First run (no token, no jobs) → onboarding, unless dismissed for THIS install.
+  // The "dismissed" flag is namespaced by data dir so a stale flag from another
+  // install on the same localhost origin can't suppress onboarding for a fresh one.
   useEffect(() => {
-    if (localStorage.getItem("jp_onboarded")) return;
     getHealth()
       .then((h) => {
-        if (!h.apify_token_set && h.jobs === 0) router.push("/onboarding");
+        if (h.apify_token_set || h.jobs > 0) return;
+        if (localStorage.getItem(`jp_onboarded:${h.data_dir}`)) return;
+        router.push("/onboarding");
       })
       .catch(() => {});
   }, [router]);

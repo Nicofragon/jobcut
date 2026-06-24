@@ -7,6 +7,7 @@ import {
   createStructuredSearch,
   draftProfile,
   extractCv,
+  getHealth,
   getProfileStructured,
   getScoringBackends,
   putConfig,
@@ -75,8 +76,14 @@ export default function OnboardingPage() {
       .catch(() => {});
   }, []);
 
-  function leave() {
-    localStorage.setItem("jp_onboarded", "1");
+  async function leave() {
+    // Namespace the "dismissed" flag by data dir so it only affects this install.
+    try {
+      const h = await getHealth();
+      localStorage.setItem(`jp_onboarded:${h.data_dir}`, "1");
+    } catch {
+      localStorage.setItem("jp_onboarded", "1");
+    }
     router.push("/");
   }
 
