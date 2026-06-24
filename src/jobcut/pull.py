@@ -156,10 +156,33 @@ def load_searches():
     return [(f.stem, json.loads(f.read_text())) for f in files]
 
 
+_PLACEHOLDER_TOKEN = "apify_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+
+def _resolve_token() -> str | None:
+    """Read the Apify token fresh at call time.
+
+    The data-dir ``.env`` is authoritative (the web console writes the token there),
+    then the process environment as a fallback. We read the file directly rather than
+    trusting ``os.environ`` because ``load_dotenv`` runs once at import — a token saved
+    via the UI after the server started would otherwise be missed (stale placeholder).
+    """
+    env_path = paths.data_dir() / ".env"
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            s = line.strip()
+            if s.startswith("APIFY_TOKEN=") and "=" in s:
+                v = s.split("=", 1)[1].strip()
+                if v and v != _PLACEHOLDER_TOKEN:
+                    return v
+    env = os.environ.get("APIFY_TOKEN")
+    return env if env and env != _PLACEHOLDER_TOKEN else None
+
+
 def client():
-    token = os.environ.get("APIFY_TOKEN")
+    token = _resolve_token()
     if not token:
-        sys.exit("APIFY_TOKEN is not set. Put it in .env or export APIFY_TOKEN=apify_api_...")
+        sys.exit("APIFY_TOKEN is not set. Add it in the console (Settings → Connect) or in .env, then try again.")
     from apify_client import ApifyClient
     return ApifyClient(token)
 
