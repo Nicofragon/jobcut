@@ -31,5 +31,7 @@ Stop only when:
 
 ## Tracked vs not
 
-- Commit code, tests, and docs (incl. `docs/assets/`).
+- Commit code, tests, and the user-facing docs (`README.md`, `docs/MANUAL.md`,
+  `docs/WORKFLOW.md`). Keep architecture/strategy docs and design assets out of the
+  public repo.
 - Leave untracked: `.claude/`, `.playwright-mcp/`, `bin/`, `scripts/` (local-only).

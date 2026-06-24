@@ -26,7 +26,7 @@ which skills are in demand, where, and how that shifts over weeks.
 - **Two frontends, one core.** A thin **FastAPI** bridge imports the `jobcut`
   package and exposes it at `/api`; the **Next.js console** consumes it (primary UI).
   A **Streamlit "lite"** app (no Node) talks to the package directly for read + status
-  toggle. See [ADR-001](docs/adr-001-web-pipeline-bridge.md).
+  toggle.
 - **User status is its own table.** Application status lives in an `applications` table
   (separate from derived `scores`), so a re-score never clobbers your funnel.
 - **Role-agnostic & profile-driven.** Searches and the scoring rubric are *derived from

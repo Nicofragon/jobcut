@@ -464,6 +464,4 @@ base de la API en el front).
 
 ---
 
-*Documentos relacionados: [índice de docs](README.md) ·
-[ADR-001](adr-001-web-pipeline-bridge.md) · [WORKFLOW](WORKFLOW.md) ·
-[modelo de datos y scoring](design-data-dashboard-scoring.md).*
+*Documentos relacionados: [índice de docs](README.md) · [WORKFLOW](WORKFLOW.md).*
