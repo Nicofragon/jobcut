@@ -23,7 +23,14 @@ def _runner(body: RunIn):
         return lambda emit: score.run(progress=emit)
     if body.kind == "pull":
         argv = [] if body.mode == "trigger" else ["--read"]
-        return lambda emit: pull.main(argv, progress=emit)
+
+        def pull_then_score(emit):
+            # A pull on its own leaves the jobs unscored, so the shortlist looks
+            # empty — score right after so "Find new jobs" lands a ranked list.
+            pull.main(argv, progress=emit)
+            score.run(progress=emit)
+
+        return pull_then_score
     raise HTTPException(status_code=400, detail=f"unknown run kind: {body.kind!r}")
 
 
