@@ -44,9 +44,9 @@ else
   warn "Node/npm not found — installed the CLI only. Install Node 20.9+ to use the web console."
 fi
 
-# 4) Scaffold your data files in this folder (idempotent — keeps your edits)
-say "Setting up your data files…"
-./.venv/bin/jobcut init --no-input
+# 4) Prepare the data folder (idempotent; the web wizard can also create these)
+say "Preparing your data folder…"
+./.venv/bin/jobcut init --no-input >/dev/null
 
 # 5) Make the ./jobcut launcher runnable (lets you skip activating the venv)
 chmod +x jobcut 2>/dev/null || true
@@ -56,15 +56,20 @@ cat <<'EOF'
 ==========================================================================
   Setup complete.
 
-  Next, edit these files (just created in this folder):
-    .env            add your APIFY_TOKEN   (console.apify.com -> Settings -> API)
-    profile.md      your roles, skills, dealbreakers  (drives the scoring)
-    searches/*.json your job titles + LinkedIn geoIds  (copy an example-*.json)
+  Everything else happens in the app — no files to edit by hand. The console
+  opens a guided wizard where you:
+    1. paste your Apify token   (console.apify.com -> Settings -> API)
+    2. add your profile         (roles, skills, dealbreakers)
+    3. set up your searches     (job titles + location)
+    4. run your first scrape    ("Find new jobs")
 
-  Then run your first scrape and watch jobs populate:
-    ./jobcut pull               first real scrape (~$0.04-0.18 via Apify)
-    ./jobcut score && ./jobcut surface
-    ./jobcut serve --open       or open the local web console
+  Start it any time with:   ./jobcut serve --open
 ==========================================================================
 
 EOF
+
+# 6) If we're in an interactive terminal, open the guided wizard right away.
+if [ -t 1 ]; then
+  say "Opening the setup wizard in your browser… (Ctrl+C to stop; restart with ./jobcut serve --open)"
+  exec ./jobcut serve --open
+fi
