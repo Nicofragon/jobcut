@@ -54,11 +54,14 @@ def test_to_actor_input_shape():
     assert a["maxItems"] == 40 and a["postedLimit"] == "24h" and a["sortBy"] == "relevance"
 
 
-def test_unknown_location_goes_to_freetext_plus_override():
-    s = sm.StructuredSearch(name="x", titles=["X"], locations=["Atlantis"], geo_ids=["123456"])
+def test_geoid_takes_precedence_over_freetext_location():
+    # both a typed name and a geoId → send ONLY geoIds (never both — the actor doesn't
+    # define how it combines them). This is the LinkedIn-import case (Madrid name + geoId).
+    s = sm.StructuredSearch(name="x", titles=["X"],
+                            locations=["Madrid, Community of Madrid, Spain"], geo_ids=["100994331"])
     a = sm.to_actor_input(s)
-    assert a["geoIds"] == ["123456"]                    # manual override → geoIds
-    assert a["locations"] == ["Atlantis"]              # unresolved name → free-text locations
+    assert a["geoIds"] == ["100994331"]
+    assert "locations" not in a
 
 
 def test_plain_location_needs_no_geoid():

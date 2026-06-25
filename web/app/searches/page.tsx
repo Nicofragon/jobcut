@@ -260,6 +260,12 @@ function SearchFields({
       <Labeled label="Locations">
         <TagInput values={form.locations} onChange={(v) => set("locations", v)} placeholder="e.g. European Economic Area — press Enter…" />
       </Labeled>
+      {form.geo_ids.length > 0 && form.locations.length > 0 && (
+        <p className="-mt-2 text-xs text-[color:var(--color-accent-amber)]">
+          A geoId is set, so this search targets the geoId and these typed names are ignored. Remove the
+          geoId (under Advanced) to search by name instead.
+        </p>
+      )}
       <Labeled label="Work type">
         <WorkTypeToggle values={form.work_types} onChange={(v) => set("work_types", v)} />
       </Labeled>

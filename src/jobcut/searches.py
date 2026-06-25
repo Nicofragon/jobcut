@@ -57,14 +57,20 @@ def split_locations(s: StructuredSearch) -> tuple[list[str], list[str]]:
 
 
 def to_actor_input(s: StructuredSearch) -> dict:
-    """Serialize to the actor input dict pull.py sends. `locations` (free text) and/or
-    `geoIds` are included only when present — a search needs one or the other, not both."""
+    """Serialize to the actor input dict pull.py sends.
+
+    geoIds take precedence: when a search has any geoId we send ONLY geoIds, never
+    also `locations`. The actor doesn't document how it combines the two (it could
+    intersect them → zero results), and a numeric geoId is exact while a free-text
+    name can be misread (LinkedIn reads "UK" as "Ukraine"). Plain location names are
+    sent only when there is no geoId at all.
+    """
     as_text, geoids = split_locations(s)
     actor: dict = {"jobTitles": list(s.titles)}
-    if as_text:
-        actor["locations"] = as_text
     if geoids:
         actor["geoIds"] = geoids
+    elif as_text:
+        actor["locations"] = as_text
     actor["workplaceType"] = list(s.work_types)
     actor["employmentType"] = list(s.employment_types) or list(_DEFAULT_EMPLOYMENT)
     actor["maxItems"] = s.max_items or _DEFAULT_MAX_ITEMS
