@@ -52,18 +52,24 @@ def test_to_actor_input_shape():
     assert a["maxItems"] == 40 and a["postedLimit"] == "24h" and a["sortBy"] == "relevance"
 
 
-def test_unknown_location_uses_manual_override():
+def test_unknown_location_goes_to_freetext_plus_override():
     s = sm.StructuredSearch(name="x", titles=["X"], locations=["Atlantis"], geo_ids=["123456"])
     a = sm.to_actor_input(s)
-    assert a["geoIds"] == ["123456"]                    # falls back to the manual override
-    assert sm.resolve_geoids(s)[1] is False             # not needs_geoid
+    assert a["geoIds"] == ["123456"]                    # manual override → geoIds
+    assert a["locations"] == ["Atlantis"]              # unresolved name → free-text locations
 
 
-def test_unknown_location_no_override_marks_needs_geoid():
+def test_plain_location_needs_no_geoid():
     s = sm.StructuredSearch(name="x", titles=["X"], locations=["Atlantis"])
-    geoids, needs = sm.resolve_geoids(s)
-    assert needs is True                                 # marked, not crashed
-    assert sm.to_actor_input(s)["geoIds"] == ["REPLACE_ME"]
+    a = sm.to_actor_input(s)
+    assert a["locations"] == ["Atlantis"] and "geoIds" not in a   # runnable as text, no REPLACE_ME
+    assert sm.from_actor_input("x", a).needs_geoid is False       # has a location → ready
+
+
+def test_no_location_at_all_flags_needs_geoid():
+    a = sm.to_actor_input(sm.StructuredSearch(name="x", titles=["X"]))
+    assert "geoIds" not in a and "locations" not in a
+    assert sm.from_actor_input("x", a).needs_geoid is True        # nothing to target → needs setup
 
 
 def test_defaults_when_omitted():
@@ -111,8 +117,10 @@ def test_structured_put_and_list():
     c = _client()
     c.post("/api/searches/structured", json={"name": "s1", "titles": ["X"],
                                              "locations": ["Atlantis"]})
-    # needs_geoid surfaced for an unresolved location
-    assert c.get("/api/searches/structured/s1").json()["needs_geoid"] is True
+    # a plain location name is runnable on its own (free-text), so it's NOT needs_geoid
+    s1 = c.get("/api/searches/structured/s1").json()
+    assert s1["needs_geoid"] is False and s1["locations"] == ["Atlantis"]
+    assert c.get("/api/searches/s1").json()["input"]["locations"] == ["Atlantis"]
     c.put("/api/searches/structured/s1", json={"name": "s1", "titles": ["Y"],
                                               "locations": ["Atlantis"], "geo_ids": ["999"]})
     assert c.get("/api/searches/s1").json()["input"]["geoIds"] == ["999"]

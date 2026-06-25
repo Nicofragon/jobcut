@@ -58,7 +58,7 @@ export default function SearchesPage() {
       )}
 
       <div className="grid gap-3">
-        {items.map((s) => (
+        {[...items].sort((a, b) => rank(a) - rank(b)).map((s) => (
           <SearchCard key={s.name} search={s} onChanged={load} />
         ))}
         {items.length === 0 && !error && (
@@ -99,6 +99,16 @@ function isExample(name: string | null): boolean {
   return !!name && name.startsWith("example-");
 }
 
+function isReady(s: StructuredSearch): boolean {
+  return s.titles.length > 0 && !s.needs_geoid;
+}
+
+// Sort so configured, real searches surface first and examples sink to the bottom —
+// the top of the page reads as "here's what's active".
+function rank(s: StructuredSearch): number {
+  return (isExample(s.name) ? 2 : 0) + (isReady(s) ? 0 : 1);
+}
+
 function SearchCard({ search, onChanged }: { search: StructuredSearch; onChanged: () => void }) {
   const name = search.name ?? "";
   const [form, setForm] = useState<Form>(formFrom(search));
@@ -122,30 +132,45 @@ function SearchCard({ search, onChanged }: { search: StructuredSearch; onChanged
     setTimeout(() => setMsg(null), 2000);
   }
 
+  const [open, setOpen] = useState(false);
+
   return (
-    <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold text-on-surface">{name}</h3>
-          {isExample(name) && <Badge tone="neutral">Example</Badge>}
-          <StatusPill ready={ready} />
+    <div className="rounded-card border border-border bg-surface shadow-card">
+      {/* Always-visible header: name, status, and a one-line summary — scannable when collapsed. */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 p-5 text-left"
+        aria-expanded={open}
+      >
+        <Icon name="chevron-right" size={18} className={`shrink-0 text-on-surface-faint transition-transform ${open ? "rotate-90" : ""}`} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold text-on-surface">{name}</h3>
+            {isExample(name) && <Badge tone="neutral">Example</Badge>}
+            <StatusPill ready={ready} />
+          </div>
+          <p className="mt-1 truncate text-xs text-on-surface-variant">{summarize(form)}</p>
         </div>
-        <div className="flex items-center gap-2">
-          {msg && <span className="text-xs text-on-surface-variant">{msg}</span>}
-          <button onClick={save} className={btnPrimary}>
-            Save
-          </button>
-          <button
-            onClick={() => deleteSearch(name).then(onChanged)}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm text-on-surface-variant transition-colors hover:text-[color:var(--color-accent-red)]"
-          >
-            Delete
-          </button>
+      </button>
+
+      {open && (
+        <div className="border-t border-border p-5 pt-4">
+          <div className="mb-4 flex items-center justify-end gap-2">
+            {msg && <span className="text-xs text-on-surface-variant">{msg}</span>}
+            <button onClick={save} className={btnPrimary}>
+              Save
+            </button>
+            <button
+              onClick={() => deleteSearch(name).then(onChanged)}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm text-on-surface-variant transition-colors hover:text-[color:var(--color-accent-red)]"
+            >
+              Delete
+            </button>
+          </div>
+          <SearchFields form={form} set={set} needsGeoid={needsGeoid} />
+          <ActorPreview form={form} />
         </div>
-      </div>
-      <p className="mb-4 text-xs text-on-surface-variant">{summarize(form)}</p>
-      <SearchFields form={form} set={set} needsGeoid={needsGeoid} />
-      <ActorPreview form={form} />
+      )}
     </div>
   );
 }
@@ -232,21 +257,24 @@ function SearchFields({
 
       {needsGeoid && (
         <div className="rounded-lg border border-[color:var(--color-accent-amber)]/40 bg-[color:var(--color-accent-amber)]/10 p-3 text-sm text-on-surface">
-          <p className="font-medium">A location didn&apos;t match the job source automatically.</p>
+          <p className="font-medium">Add a location to target this search.</p>
           <p className="mt-1 text-on-surface-variant">
-            The search still works — to target precisely, add a LinkedIn <code>geoId</code> (from a jobs-search URL) under Advanced.
+            Type a city or country above (e.g. <code>Madrid</code> or <code>Spain</code>) — plain names work, no codes needed.
           </p>
-          <button onClick={() => setAdvanced(true)} className="mt-1.5 text-sm font-medium text-primary hover:underline">
-            Add a geoId
-          </button>
         </div>
       )}
 
-      {advanced && (
-        <Labeled label="Advanced: geoIds" hint="Only if a location didn't resolve. Numeric LinkedIn geo IDs.">
+      <details className="text-sm" open={advanced || form.geo_ids.length > 0}>
+        <summary className="cursor-pointer text-on-surface-faint hover:text-on-surface-variant" onClick={() => setAdvanced(true)}>
+          Advanced: geoIds (optional)
+        </summary>
+        <div className="mt-2 space-y-1.5">
           <TagInput values={form.geo_ids} onChange={(v) => set("geo_ids", v)} placeholder="e.g. 91000000 — press Enter…" />
-        </Labeled>
-      )}
+          <p className="text-xs text-on-surface-variant">
+            Optional precision: numeric LinkedIn geo IDs from a jobs-search URL. A plain location name above is enough on its own.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

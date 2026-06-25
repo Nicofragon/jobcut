@@ -287,15 +287,19 @@ def derive_config(pd: ProfileData) -> dict:
 
 def _search_note(pd: ProfileData) -> str:
     return (f"Generated from profile (based in: {pd.based_in or 'unset'}). "
-            "Set geoIds: open a LinkedIn jobs search for your area and copy the geoId "
-            "from the URL. Whether a remote job is hireable is decided by route.py.")
+            "Edit `locations` to your city/country (LinkedIn understands plain names). "
+            "A geoId is optional precision. Remote hireability is decided by route.py.")
 
 
 def derive_searches(pd: ProfileData) -> dict[str, dict]:
     if not pd.target_titles:
         return {}
-    base = {"jobTitles": pd.target_titles, "geoIds": ["REPLACE_ME"],
+    # The actor takes free-text `locations`; use the profile's base location so a new
+    # user gets a runnable search with no geoId to hunt down (geoId stays optional).
+    base = {"jobTitles": pd.target_titles,
             "employmentType": ["full-time"], "postedLimit": "24h", "sortBy": "relevance"}
+    if pd.based_in:
+        base["locations"] = [pd.based_in]
     note = _search_note(pd)
     rm = pd.remote_mode.lower()
     slug = _slug(pd.based_in) or "local"
@@ -311,7 +315,7 @@ def derive_searches(pd: ProfileData) -> dict[str, dict]:
         searches[slug] = {**base, "workplaceType": ["office", "hybrid"], "maxItems": 50, "_note": note}
         if "yes" in rm or "remote" in rm:
             searches["remote"] = {**base, "workplaceType": ["remote"], "maxItems": 65,
-                                  "_note": "Remote search. Set geoIds to your region; route.py decides hireability."}
+                                  "_note": "Remote search. Widen `locations` to your region/country; route.py decides hireability."}
     return searches
 
 

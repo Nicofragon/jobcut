@@ -99,7 +99,7 @@ def test_derive_searches_respects_remote_mode():
     only = next(iter(s.values()))
     assert only["workplaceType"] == ["office"]   # actor enum: remote|hybrid|office (no "on-site")
     assert only["jobTitles"] == ["Registered Nurse", "ICU Nurse"]
-    assert only["geoIds"] == ["REPLACE_ME"]
+    assert only["locations"] == ["Boston, USA"] and "geoIds" not in only  # plain name, no geoId to hunt
 
 
 def test_apply_is_non_destructive(tmp_path):

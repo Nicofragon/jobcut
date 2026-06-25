@@ -4,9 +4,10 @@
 type IconName =
   | "arrow-left" | "arrow-right" | "search" | "refresh" | "building" | "map-pin" | "banknote"
   | "external" | "check" | "check-circle" | "users" | "calendar" | "user"
-  | "briefcase" | "send" | "sparkles" | "lock" | "upload" | "plus" | "x" | "clock";
+  | "briefcase" | "send" | "sparkles" | "lock" | "upload" | "plus" | "x" | "clock" | "chevron-right";
 
 const PATHS: Record<IconName, React.ReactNode> = {
+  "chevron-right": <path d="m9 18 6-6-6-6" />,
   "arrow-left": <><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></>,
   "arrow-right": <><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></>,
   lock: <><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>,

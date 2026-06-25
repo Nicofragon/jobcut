@@ -1,10 +1,12 @@
 """searches.py — structured ↔ actor-input mapping for saved searches (B2).
 
 A saved search is canonically `searches/<name>.json` holding the
-harvestapi/linkedin-job-search actor input. The jargon pain is `geoIds` (numeric
-LinkedIn ids). This adds a form-friendly `StructuredSearch` that round-trips with
-that actor dict, resolving human location names to geoIds via `geo.resolve` and
-falling back to a manual override / `needs_geoid` flag — never inventing ids.
+harvestapi/linkedin-job-search actor input. The jargon pain was `geoIds` (numeric
+LinkedIn ids). The actor also accepts free-text `locations` (its primary location
+filter), so a plain name like "Madrid" is a runnable search with no geoId. This
+`StructuredSearch` round-trips with the actor dict: names go to `locations`, names
+we have a verified geoId for (and manual overrides) go to `geoIds`, and the geoId
+is purely optional precision — never invented, never a REPLACE_ME.
 
 `searches/*.json` stays canonical: pull.py and profile.derive_searches are untouched.
 """
@@ -26,58 +28,68 @@ class StructuredSearch(BaseModel):
 
     name: str | None = None
     titles: list[str] = Field(default_factory=list)
-    locations: list[str] = Field(default_factory=list)        # human names ("European Economic Area")
+    locations: list[str] = Field(default_factory=list)        # human names ("Madrid"); sent as actor `locations`
     work_types: list[str] = Field(default_factory=list)       # actor enum: remote | hybrid | office
     employment_types: list[str] = Field(default_factory=list)
     max_items: int | None = None
     posted_within: str | None = None                          # e.g. "24h"
-    geo_ids: list[str] = Field(default_factory=list)          # advanced: manual geoId override
-    needs_geoid: bool = False                                 # set on read/resolve when unresolved
+    geo_ids: list[str] = Field(default_factory=list)          # advanced: optional manual geoId override
+    needs_geoid: bool = False                                 # True only when there's no location at all
 
 
-def resolve_geoids(s: StructuredSearch) -> tuple[list[str], bool]:
-    """Resolve a search's geoIds: table hits + manual override (deduped).
+def split_locations(s: StructuredSearch) -> tuple[list[str], list[str]]:
+    """Split a search's locations into (free-text names, geoIds).
 
-    Returns (geo_ids, needs_geoid). If nothing resolves and there's no override,
-    returns ([REPLACE_ME], True) so the search is flagged, never run with a bogus id.
+    The actor accepts free-text `locations` (its primary location filter), so a
+    city/country name needs NO geoId. Names we happen to have a verified geoId for
+    (e.g. a region like the EEA) plus any manual override go to `geoIds` for
+    precision; everything else stays as text. We never emit a REPLACE_ME — a plain
+    location name is a valid, runnable search on its own.
     """
-    resolved = [gid for loc in s.locations if (gid := geo.resolve(loc))]
-    geoids = list(dict.fromkeys([*resolved, *s.geo_ids]))     # resolved first, override supplements
-    if geoids:
-        return geoids, False
-    return [_GEOID_UNSET], True
+    as_text, resolved = [], []
+    for loc in s.locations:
+        gid = geo.resolve(loc)
+        (resolved.append(gid) if gid else as_text.append(loc))
+    overrides = [g for g in s.geo_ids if g and g != _GEOID_UNSET]
+    geoids = list(dict.fromkeys([*resolved, *overrides]))
+    return as_text, geoids
 
 
 def to_actor_input(s: StructuredSearch) -> dict:
-    """Serialize to the actor input dict pull.py consumes (the canonical 7 keys)."""
-    geoids, _ = resolve_geoids(s)
-    return {
-        "jobTitles": list(s.titles),
-        "geoIds": geoids,
-        "workplaceType": list(s.work_types),
-        "employmentType": list(s.employment_types) or list(_DEFAULT_EMPLOYMENT),
-        "maxItems": s.max_items or _DEFAULT_MAX_ITEMS,
-        "postedLimit": s.posted_within or _DEFAULT_POSTED,
-        "sortBy": "relevance",
-    }
+    """Serialize to the actor input dict pull.py sends. `locations` (free text) and/or
+    `geoIds` are included only when present — a search needs one or the other, not both."""
+    as_text, geoids = split_locations(s)
+    actor: dict = {"jobTitles": list(s.titles)}
+    if as_text:
+        actor["locations"] = as_text
+    if geoids:
+        actor["geoIds"] = geoids
+    actor["workplaceType"] = list(s.work_types)
+    actor["employmentType"] = list(s.employment_types) or list(_DEFAULT_EMPLOYMENT)
+    actor["maxItems"] = s.max_items or _DEFAULT_MAX_ITEMS
+    actor["postedLimit"] = s.posted_within or _DEFAULT_POSTED
+    actor["sortBy"] = "relevance"
+    return actor
 
 
 def from_actor_input(name: str, actor: dict) -> StructuredSearch:
     """Read an existing actor input dict into StructuredSearch (for the friendly form).
 
-    Human location names can't be recovered from geoIds, so existing ids land in
-    `geo_ids` (the advanced override) and `locations` stays empty. A missing/unset
-    geoId (REPLACE_ME) flags `needs_geoid`.
+    Free-text `locations` round-trip back into the form's Locations field; any
+    `geoIds` land in `geo_ids` (the advanced override). `needs_geoid` now means "no
+    location at all" (neither a name nor a geoId) — that's the only unrunnable case.
+    Legacy files with a REPLACE_ME geoId read as having no geoId.
     """
     geoids = [g for g in (actor.get("geoIds") or []) if g and g != _GEOID_UNSET]
+    locations = list(actor.get("locations") or [])
     return StructuredSearch(
         name=name,
         titles=list(actor.get("jobTitles") or []),
-        locations=[],
+        locations=locations,
         work_types=list(actor.get("workplaceType") or []),
         employment_types=list(actor.get("employmentType") or []),
         max_items=actor.get("maxItems"),
         posted_within=actor.get("postedLimit"),
         geo_ids=geoids,
-        needs_geoid=not geoids,
+        needs_geoid=not (locations or geoids),
     )
