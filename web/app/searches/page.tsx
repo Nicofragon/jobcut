@@ -7,6 +7,7 @@ import {
   deleteSearch,
   listStructuredSearches,
   previewActorInput,
+  setSearchPaused,
   updateStructuredSearch,
   type StructuredSearch,
 } from "@/lib/api";
@@ -32,6 +33,11 @@ export default function SearchesPage() {
 
   const examples = items.filter((s) => isExample(s.name));
   const real = items.filter((s) => !isExample(s.name));
+  const counts = {
+    active: items.filter((s) => !s.paused && isReady(s)).length,
+    paused: items.filter((s) => s.paused).length,
+    needsSetup: items.filter((s) => !s.paused && !isReady(s)).length,
+  };
 
   return (
     <div className="space-y-6">
@@ -41,6 +47,14 @@ export default function SearchesPage() {
           <p className="mt-1 text-on-surface-variant">
             Tell us what to look for in plain words — job titles and places. No codes to look up.
           </p>
+          {items.length > 0 && (
+            <p className="mt-1 text-xs text-on-surface-variant">
+              <span className="font-medium text-[color:var(--color-accent-green)]">{counts.active} active</span>
+              {" "}— these run on each pull
+              {counts.paused > 0 && ` · ${counts.paused} paused`}
+              {counts.needsSetup > 0 && ` · ${counts.needsSetup} need setup`}
+            </p>
+          )}
         </div>
         <RunControls onDone={load} />
       </div>
@@ -103,16 +117,17 @@ function isReady(s: StructuredSearch): boolean {
   return s.titles.length > 0 && !s.needs_geoid;
 }
 
-// Sort so configured, real searches surface first and examples sink to the bottom —
-// the top of the page reads as "here's what's active".
+// Sort so the active, configured, real searches surface first; paused ones and
+// examples sink — the top of the page reads as "here's what's actually running".
 function rank(s: StructuredSearch): number {
-  return (isExample(s.name) ? 2 : 0) + (isReady(s) ? 0 : 1);
+  return (s.paused ? 4 : 0) + (isExample(s.name) ? 2 : 0) + (isReady(s) ? 0 : 1);
 }
 
 function SearchCard({ search, onChanged }: { search: StructuredSearch; onChanged: () => void }) {
   const name = search.name ?? "";
   const [form, setForm] = useState<Form>(formFrom(search));
   const [needsGeoid, setNeedsGeoid] = useState(search.needs_geoid);
+  const [paused, setPaused] = useState(search.paused);
   const [msg, setMsg] = useState<string | null>(null);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm({ ...form, [k]: v });
 
@@ -120,11 +135,23 @@ function SearchCard({ search, onChanged }: { search: StructuredSearch; onChanged
 
   async function save() {
     try {
-      const res = await updateStructuredSearch(name, { name, ...form });
+      const res = await updateStructuredSearch(name, { name, ...form, paused });
       setNeedsGeoid(res.needs_geoid);
       flash("Saved ✓");
     } catch {
       flash("Save failed");
+    }
+  }
+  async function togglePaused(e: React.MouseEvent) {
+    e.stopPropagation();
+    const next = !paused;
+    setPaused(next);
+    try {
+      await setSearchPaused(name, next);
+      onChanged();
+    } catch {
+      setPaused(!next);
+      flash("Couldn't update");
     }
   }
   function flash(m: string) {
@@ -135,23 +162,32 @@ function SearchCard({ search, onChanged }: { search: StructuredSearch; onChanged
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="rounded-card border border-border bg-surface shadow-card">
-      {/* Always-visible header: name, status, and a one-line summary — scannable when collapsed. */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 p-5 text-left"
-        aria-expanded={open}
-      >
-        <Icon name="chevron-right" size={18} className={`shrink-0 text-on-surface-faint transition-transform ${open ? "rotate-90" : ""}`} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold text-on-surface">{name}</h3>
-            {isExample(name) && <Badge tone="neutral">Example</Badge>}
-            <StatusPill ready={ready} />
+    <div className={`rounded-card border border-border bg-surface shadow-card ${paused ? "opacity-75" : ""}`}>
+      {/* Always-visible header: name, run state, and a one-line summary — scannable when collapsed. */}
+      <div className="flex items-center gap-2 p-5">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          aria-expanded={open}
+        >
+          <Icon name="chevron-right" size={18} className={`shrink-0 text-on-surface-faint transition-transform ${open ? "rotate-90" : ""}`} />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold text-on-surface">{name}</h3>
+              {isExample(name) && <Badge tone="neutral">Example</Badge>}
+              <RunBadge paused={paused} ready={ready} />
+            </div>
+            <p className="mt-1 truncate text-xs text-on-surface-variant">{summarize(form)}</p>
           </div>
-          <p className="mt-1 truncate text-xs text-on-surface-variant">{summarize(form)}</p>
-        </div>
-      </button>
+        </button>
+        <button
+          onClick={togglePaused}
+          className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-alt"
+          title={paused ? "Resume — include in the next pull" : "Pause — keep but skip on pulls"}
+        >
+          {paused ? "Resume" : "Pause"}
+        </button>
+      </div>
 
       {open && (
         <div className="border-t border-border p-5 pt-4">
@@ -413,12 +449,12 @@ function MultiToggle({
   );
 }
 
-function StatusPill({ ready }: { ready: boolean }) {
-  return ready ? (
-    <Badge tone="green">Ready</Badge>
-  ) : (
-    <Badge tone="amber">Needs setup</Badge>
-  );
+// Run state, in priority order: a paused search never runs; an unconfigured one can't;
+// otherwise it's Active and will be scraped on the next pull.
+function RunBadge({ paused, ready }: { paused: boolean; ready: boolean }) {
+  if (paused) return <Badge tone="neutral">Paused</Badge>;
+  if (!ready) return <Badge tone="amber">Needs setup</Badge>;
+  return <Badge tone="green">● Active</Badge>;
 }
 
 function Badge({ tone, children }: { tone: "green" | "amber" | "neutral"; children: React.ReactNode }) {

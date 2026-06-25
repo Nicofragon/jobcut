@@ -1,9 +1,11 @@
 """Tests for B2 — structured searches: mapping, geoId resolution, round-trip, endpoints."""
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
-from jobcut import config, geo
+from jobcut import config, geo, paths, pull
 from jobcut import searches as sm
 from jobcut.api import create_app
 
@@ -135,6 +137,36 @@ def test_raw_crud_still_intact():
     assert c.post("/api/searches", json={"name": "raw1", "input": raw_input}).status_code == 200
     assert c.get("/api/searches/raw1").json()["input"] == raw_input
     assert c.delete("/api/searches/raw1").json() == {"deleted": "raw1"}
+
+
+def test_to_actor_input_omits_paused_flag():
+    # the pause flag is local metadata — it must NOT leak into the "what we send" preview
+    s = sm.StructuredSearch(name="x", titles=["A"], locations=["Madrid"], paused=True)
+    assert "_paused" not in sm.to_actor_input(s)
+
+
+def test_pause_endpoint_round_trips():
+    c = _client()
+    c.post("/api/searches/structured", json={"name": "p1", "titles": ["A"], "locations": ["Madrid"]})
+    assert c.get("/api/searches/structured/p1").json()["paused"] is False
+    # pause → persisted as _paused in the file, surfaced as paused=True
+    assert c.put("/api/searches/structured/p1/paused", json={"paused": True}).json()["paused"] is True
+    assert c.get("/api/searches/p1").json()["input"]["_paused"] is True
+    assert c.get("/api/searches/structured/p1").json()["paused"] is True
+    # resume → flag removed
+    assert c.put("/api/searches/structured/p1/paused", json={"paused": False}).json()["paused"] is False
+    assert "_paused" not in c.get("/api/searches/p1").json()["input"]
+
+
+def test_load_searches_skips_paused_and_strips_meta():
+    d = paths.searches_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "active.json").write_text(json.dumps({"jobTitles": ["A"], "locations": ["Madrid"], "_note": "hi"}))
+    (d / "off.json").write_text(json.dumps({"jobTitles": ["B"], "locations": ["Madrid"], "_paused": True}))
+    out = pull.load_searches()
+    assert [n for n, _ in out] == ["active"]                 # paused one skipped
+    sent = out[0][1]
+    assert "_note" not in sent and "_paused" not in sent     # local metadata stripped before Apify
 
 
 def test_preview_returns_actor_input_without_writing():

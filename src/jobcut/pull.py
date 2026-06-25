@@ -149,11 +149,30 @@ def aggregate_today(flat_rows, today):
 
 
 # --- Apify: trigger + download ----------------------------------------------
-def load_searches():
+def _actor_input(inp: dict) -> dict:
+    """Strip local-only metadata (underscore-prefixed keys like _note/_paused) so only
+    real actor fields are sent to Apify."""
+    return {k: v for k, v in inp.items() if not str(k).startswith("_")}
+
+
+def load_searches(*, include_paused: bool = False):
+    """Active searches as [(name, actor_input)]. Paused searches (`_paused: true`) are
+    skipped so they're kept but never scraped — that's the in-console pause control."""
     files = sorted(paths.searches_dir().glob("*.json"))
     if not files:
         sys.exit(f"No searches found in {paths.searches_dir()}")
-    return [(f.stem, json.loads(f.read_text())) for f in files]
+    out, paused = [], []
+    for f in files:
+        inp = json.loads(f.read_text())
+        if inp.get("_paused") and not include_paused:
+            paused.append(f.stem)
+            continue
+        out.append((f.stem, _actor_input(inp)))
+    if paused:
+        print(f"  · paused (skipped): {', '.join(paused)}")
+    if not out:
+        sys.exit("All searches are paused — resume at least one in the console (Searches) to pull.")
+    return out
 
 
 _PLACEHOLDER_TOKEN = "apify_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

@@ -20,10 +20,23 @@ class SearchIn(BaseModel):
     input: dict
 
 
+class PausedIn(BaseModel):
+    paused: bool
+
+
 def _path(name: str):
     if not _NAME_RE.match(name):
         raise HTTPException(status_code=400, detail="invalid search name")
     return paths.searches_dir() / f"{name}.json"
+
+
+def _write_structured(p, body: searches_mod.StructuredSearch) -> None:
+    """Write the canonical actor input, carrying the local-only `_paused` flag (kept
+    out of to_actor_input so the 'what we send' preview stays clean)."""
+    actor = searches_mod.to_actor_input(body)
+    if body.paused:
+        actor["_paused"] = True
+    p.write_text(json.dumps(actor, indent=2))
 
 
 @router.get("")
@@ -73,7 +86,7 @@ def create_structured(body: searches_mod.StructuredSearch):
     if p.exists():
         raise HTTPException(status_code=409, detail="search already exists")
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(searches_mod.to_actor_input(body), indent=2))
+    _write_structured(p, body)
     return searches_mod.from_actor_input(body.name, json.loads(p.read_text()))
 
 
@@ -81,8 +94,25 @@ def create_structured(body: searches_mod.StructuredSearch):
 def update_structured(name: str, body: searches_mod.StructuredSearch):
     p = _path(name)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(searches_mod.to_actor_input(body), indent=2))
+    _write_structured(p, body)
     return searches_mod.from_actor_input(name, json.loads(p.read_text()))
+
+
+@router.put("/structured/{name}/paused", response_model=searches_mod.StructuredSearch)
+def set_paused(name: str, body: PausedIn):
+    """Pause/resume a search without touching its config. A raw read-modify-write so
+    everything else in the file (including any `_note`) is preserved. Paused searches
+    are kept but skipped by `jobcut pull` / the scheduler."""
+    p = _path(name)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="search not found")
+    data = json.loads(p.read_text())
+    if body.paused:
+        data["_paused"] = True
+    else:
+        data.pop("_paused", None)
+    p.write_text(json.dumps(data, indent=2))
+    return searches_mod.from_actor_input(name, data)
 
 
 @router.delete("/structured/{name}")

@@ -297,8 +297,11 @@ export type StructuredSearch = {
   posted_within: string | null;
   geo_ids: string[];
   needs_geoid: boolean;
+  paused: boolean;
 };
 export const listStructuredSearches = () => api<StructuredSearch[]>("/searches/structured");
+export const setSearchPaused = (name: string, paused: boolean) =>
+  api<StructuredSearch>(`/searches/structured/${name}/paused`, { method: "PUT", body: JSON.stringify({ paused }) });
 export const createStructuredSearch = (s: Partial<StructuredSearch>) =>
   api<StructuredSearch>("/searches/structured", { method: "POST", body: JSON.stringify(s) });
 export const updateStructuredSearch = (name: string, s: Partial<StructuredSearch>) =>

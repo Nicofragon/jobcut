@@ -35,6 +35,7 @@ class StructuredSearch(BaseModel):
     posted_within: str | None = None                          # e.g. "24h"
     geo_ids: list[str] = Field(default_factory=list)          # advanced: optional manual geoId override
     needs_geoid: bool = False                                 # True only when there's no location at all
+    paused: bool = False                                      # kept but not scraped (in-console pause)
 
 
 def split_locations(s: StructuredSearch) -> tuple[list[str], list[str]]:
@@ -92,4 +93,5 @@ def from_actor_input(name: str, actor: dict) -> StructuredSearch:
         posted_within=actor.get("postedLimit"),
         geo_ids=geoids,
         needs_geoid=not (locations or geoids),
+        paused=bool(actor.get("_paused")),
     )
