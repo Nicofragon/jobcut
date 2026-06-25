@@ -90,8 +90,12 @@ def test_process_timing_per_app_null_under_two_rounds(client):
     assert r.json() is None
 
 
-def test_process_timing_per_app_404(client):
-    assert client.get("/api/applications/999/process/timing").status_code == 404
+def test_process_timing_per_app_null_when_no_application(client):
+    # A shortlist job with no application returns null (200), NOT 404 — the job detail
+    # page opens this for not-yet-applied roles and a 404 would break the whole page (B-11).
+    r = client.get("/api/applications/999/process/timing")
+    assert r.status_code == 200
+    assert r.json() is None
 
 
 def test_process_timing_summary(client):
