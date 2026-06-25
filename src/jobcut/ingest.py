@@ -13,6 +13,11 @@ no one writes raw SQL.
   scraped rows in either the flattened `pull.flatten()` shape (has ``job_id``) or
   the nested harvestapi actor shape (has ``id``). Deduped by job_id via
   `pull.aggregate_today` + `db.upsert_jobs`.
+- `add_job` (B-1, `jobcut add-job` / `POST /applications/manual`): create ONE offer
+  manually from ``{url?, company, title, location?, description?, job_id?}``. The
+  ``job_id`` is derived (explicit > `jobid.job_id_from_url` > `jobid.job_id_from_fields`)
+  so it's stable/deterministic, then upserted (``source_searches='manual'``) through the
+  SAME path import_jobs uses (`pull.aggregate_today` + `db.upsert_jobs`).
 - `ingest_events` (B-5, `jobcut ingest-events`): the *write-path bridge* — a list or
   ``{"events": [...]}`` of application write-ops. One op per item, dispatched by the
   fields present (``status`` → `db.set_application_status`; ``fields`` →
@@ -153,6 +158,63 @@ def import_jobs(path, conn=None) -> dict:
         # rows that collapsed onto an already-counted job_id within this file
         skipped = len(flat_rows) - len(today_agg)
         return {"new": inserted, "updated": updated, "skipped": skipped, "invalid": invalid}
+    finally:
+        if own:
+            conn.close()
+
+
+# --- manual job entry (B-1) -------------------------------------------------
+
+def add_job(fields: dict, conn=None) -> dict:
+    """Create one offer manually and upsert it (source='manual'). Returns {job_id, created}.
+
+    `fields`: {url?, company, title, location?, description?, job_id?}. The job_id is
+    derived (explicit ``job_id`` > `jobid.job_id_from_url(url)` >
+    `jobid.job_id_from_fields(company, title)`) so it's stable/deterministic — a later
+    LinkedIn scrape dedupes onto it, and an orphan application's id can be repaired.
+
+    Requires at least (company AND title) OR a url that yields a job_id — raises
+    ValueError otherwise. The URL is stored in `apply_url` (and `linkedin_url` when it's
+    a LinkedIn url). Routes through the SAME path import_jobs uses (`pull.aggregate_today`
+    + `db.upsert_jobs`), so first_seen/last_seen and idempotent re-adds are handled there.
+    """
+    from . import jobid, pull
+
+    url = str(fields.get("url", "") or "").strip()
+    company = str(fields.get("company", "") or "").strip()
+    title = str(fields.get("title", "") or "").strip()
+    explicit_id = str(fields.get("job_id", "") or "").strip()
+
+    if explicit_id:
+        jid = explicit_id
+    elif url and jobid.job_id_from_url(url):
+        jid = jobid.job_id_from_url(url)
+    elif company and title:
+        jid = jobid.job_id_from_fields(company, title)
+    else:
+        raise ValueError(
+            "add_job needs at least (company AND title) or a URL that yields a job_id"
+        )
+
+    is_linkedin = "linkedin.com" in url.lower()
+    row = {
+        "job_id": jid,
+        "_source": "manual",
+        "title": title,
+        "company_name": company,
+        "location": str(fields.get("location", "") or "").strip(),
+        "description": str(fields.get("description", "") or ""),
+        "apply_url": url,
+        "linkedin_url": url if is_linkedin else "",
+    }
+
+    own = conn is None
+    conn = conn or db.connect()
+    try:
+        today = datetime.date.today().isoformat()
+        today_agg = pull.aggregate_today([row], today)
+        inserted, _updated = db.upsert_jobs(conn, today_agg, today)
+        return {"job_id": jid, "created": inserted > 0}
     finally:
         if own:
             conn.close()

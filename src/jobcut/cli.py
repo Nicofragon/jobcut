@@ -180,6 +180,38 @@ def cmd_import_jobs(args) -> int:
     return 0
 
 
+def cmd_add_job(args) -> int:
+    """Add a job manually (by URL or fields); optionally link an application."""
+    from . import db, ingest
+
+    fields = {}
+    for key in ("url", "company", "title", "location", "description"):
+        val = getattr(args, key, "") or ""
+        if val:
+            fields[key] = val
+    if args.job_id:
+        fields["job_id"] = args.job_id
+
+    conn = db.connect()
+    try:
+        try:
+            result = ingest.add_job(fields, conn)
+        except ValueError as exc:
+            print(f"add-job: {exc}")
+            return 1
+        jid = result["job_id"]
+        verb = "created" if result["created"] else "updated"
+        msg = f"add-job · {verb} job {jid}"
+        if args.apply is not None:
+            status = args.apply if isinstance(args.apply, str) else "applied"
+            db.set_application_status(conn, jid, status, source="manual")
+            msg += f" · linked application ({status})"
+        print(msg)
+        return 0
+    finally:
+        conn.close()
+
+
 def cmd_unscored(args) -> int:
     """List hireable jobs that still need a score (read-only; for an external scorer)."""
     from . import db, filter as _filter
@@ -548,6 +580,17 @@ def build_parser() -> argparse.ArgumentParser:
     pij.add_argument("json", help='path to JSON: a list of job rows or {"jobs": [...]}; flattened '
                                   "(pull.flatten) or nested harvestapi actor items")
     pij.set_defaults(func=cmd_import_jobs)
+
+    paj = sub.add_parser("add-job", help="add a job manually (by URL or fields); optionally link an application")
+    paj.add_argument("--url", default="", help="job posting URL (any ATS); derives a stable job_id")
+    paj.add_argument("--company", default="", help="company name")
+    paj.add_argument("--title", default="", help="job title")
+    paj.add_argument("--location", default="", help="location")
+    paj.add_argument("--description", default="", help="job description (optional)")
+    paj.add_argument("--job-id", dest="job_id", default="", help="bind to an existing application's job_id (repair an orphan)")
+    paj.add_argument("--apply", nargs="?", const="applied", default=None, metavar="STATUS",
+                     help="also create/link an application with this status (default: applied)")
+    paj.set_defaults(func=cmd_add_job)
 
     pu = sub.add_parser("unscored", help="list hireable jobs that still need a score (for an external scorer)")
     pu.add_argument("--json", action="store_true", help="print the jobs (with descriptions) as JSON to stdout")
