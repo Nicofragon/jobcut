@@ -12,13 +12,15 @@ top-to-bottom and have a working bridge.
 
 ## 1. What you're installing
 
-Three skills (each a folder under [`skills/`](skills/)):
+Five skills (each a folder under [`skills/`](skills/)):
 
 | Skill | What it does |
 |-------|--------------|
 | [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | `jobcut pull` each saved search (local Apify client, no MCP) → score → `surface` the top matches |
 | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Score (or re-score) jobs already in the DB with Claude, written straight back via `ingest-scores` — no Apify, no manual JSON |
+| [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** What to apply to (top 10), pipeline/weekly stats (`stats --json`), or open the web console (`serve --open`) |
 | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile (`market --json`) |
+| [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull the latest code, reinstall if deps changed, rebuild + restart the console (fixes "still see the old design") |
 
 ## 2. Prerequisites
 
@@ -37,10 +39,12 @@ Copy the skill folders into your Claude skills directory (for Claude Code that's
 `~/.claude/skills/`; Cowork uses the same per-user skills location):
 
 ```bash
-# from the repo root
-cp -R integrations/cowork/skills/jobcut-daily  ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-score  ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-market ~/.claude/skills/
+# from the repo root — copy all five
+cp -R integrations/cowork/skills/jobcut-daily   ~/.claude/skills/
+cp -R integrations/cowork/skills/jobcut-score   ~/.claude/skills/
+cp -R integrations/cowork/skills/jobcut-review  ~/.claude/skills/
+cp -R integrations/cowork/skills/jobcut-market  ~/.claude/skills/
+cp -R integrations/cowork/skills/jobcut-update  ~/.claude/skills/
 ```
 
 Keep each skill's folder intact (the `SKILL.md` must stay inside its folder). Restart
@@ -72,14 +76,18 @@ Then, in `$JOBCUT_DATA_DIR`:
 The daily pull triggers a paid Apify actor. Pick **one** runner so the same searches
 aren't scraped — and paid for — twice:
 
-- **Cowork bridge** — schedule `jobcut-daily` as a Cowork scheduled task (e.g. each
-  weekday morning). Best if you want Claude to score and summarize each run.
-- **Repo cron** — a cron job that runs the CLI directly
-  (`jobcut pull && jobcut score && jobcut surface`). Best if you want a
+- **In-app scheduler (recommended)** — open the console (`jobcut serve --open`) and go
+  to **Settings → Automation**. Toggle it on, pick a frequency and time, and jobcut
+  installs an OS timer (launchd on macOS, cron on Linux) that runs `jobcut daily` for
+  you. Nothing to edit by hand; change it any time from the UI.
+- **Cowork bridge** — run/schedule `jobcut-daily` from Claude when you want Claude to
+  score and summarize each run.
+- **Repo cron** — your own cron entry running `jobcut daily` directly, for a
   hands-off, no-Claude run.
 
-**Never both for the same searches.** (One-owner rule.) Any personal v1 you already
-run is separate, but still don't point two runners at the same Apify searches.
+**Never two for the same searches.** (One-owner rule.) If the in-app scheduler is on,
+have Claude run `jobcut-daily` with `jobcut pull --read` (a free re-download) instead
+of a fresh pull, so Apify isn't paid twice.
 
 ## 6. Run it
 
@@ -88,7 +96,11 @@ In Claude (Cowork/Code), just ask:
 - **“run jobcut-daily”** → pulls, imports, scores, and shows today's top matches.
 - **“score my jobs”** → runs `jobcut-score`: Claude scores the jobs already in the DB
   and writes them back (no Apify, no manual JSON).
+- **“what should I apply to today?” / “top 10” / “how's my pipeline this week?” / “open
+  the console”** → runs `jobcut-review` (read-only; no Apify cost).
 - **“run jobcut-market”** → shows skill demand, your gaps, and segment mix.
+- **“update jobcut” / “I still see the old design”** → runs `jobcut-update`: pulls the
+  latest code, rebuilds, and restarts the console.
 
 To verify the data landed, you can also run the CLI directly:
 

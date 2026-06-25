@@ -38,8 +38,12 @@ same path the dashboard's "Find new jobs" uses.
    for **free** (no new scrape), use `jobcut pull --read` instead.
 
    Confirm with the user before a paid run, and respect the **one-owner rule**: don't
-   pull if a cron job (or another runner) already scrapes the same searches — Apify
-   would be paid twice.
+   pull if another runner already scrapes the same searches — Apify would be paid
+   twice. There are now three possible runners; **only one** should own a given
+   search: (a) the **in-app scheduler** (Settings → Automation, which runs
+   `jobcut daily` on a launchd/cron timer), (b) a hand-written cron job, or (c) this
+   skill run on demand. If the in-app scheduler is enabled, prefer running this skill
+   with `jobcut pull --read` (free re-download) so you don't double-pay.
 
 2. **Score — pick ONE mode:**
 
@@ -80,6 +84,12 @@ same path the dashboard's "Find new jobs" uses.
 
 ## Notes
 
+- **One-shot equivalent.** `jobcut daily` does pull + score + surface in a single
+  command — it's exactly what the in-app scheduler runs on a timer. Use the explicit
+  steps above when you want Claude to do the scoring (mode A); use `jobcut daily` for
+  a deterministic, no-Claude run.
+- After surfacing, hand off to **jobcut-review** if the user wants the top-10 digest,
+  pipeline stats, or to open the console.
 - Read-only commands (`unscored --json`, `surface --json`) never write. The only
   writers are `pull`, `ingest-scores`, and `score` — all via the CLI.
 - `jobcut pull` uses the local Apify client + your `APIFY_TOKEN` (no MCP). It does

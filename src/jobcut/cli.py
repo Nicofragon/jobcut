@@ -209,6 +209,28 @@ def cmd_market(args) -> int:
     return 0
 
 
+def cmd_stats(args) -> int:
+    """Read-only pipeline KPIs (applications funnel) as JSON, for an agent to answer
+    "how's my pipeline / what did I apply to this week" without touching SQLite.
+
+    Reuses db.application_funnel (the same computation the tracker page shows). The
+    UI hex colors in `funnel` are dropped here so the payload stays clean for Claude.
+    """
+    import json
+
+    from . import db
+
+    conn = db.connect()
+    try:
+        data = db.application_funnel(conn)
+    finally:
+        conn.close()
+    # funnel is [(stage, count, color), ...] for the dashboard — strip color for the CLI.
+    data["funnel"] = [{"stage": s, "count": c} for (s, c, *_rest) in data.get("funnel", [])]
+    print(json.dumps(data, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_daily(args) -> int:
     """The one-shot the scheduler runs: pull (paid unless --read) + score + surface.
 
@@ -442,6 +464,10 @@ def build_parser() -> argparse.ArgumentParser:
     pm = sub.add_parser("market", help="write the market-gaps report and dashboard")
     pm.add_argument("--json", action="store_true", help="print the market summary as JSON to stdout (read-only)")
     pm.set_defaults(func=cmd_market)
+
+    pst = sub.add_parser("stats", help="print pipeline KPIs (applications funnel) as JSON (read-only)")
+    pst.add_argument("--json", action="store_true", help="(default) print the funnel as JSON to stdout")
+    pst.set_defaults(func=cmd_stats)
 
     sub.add_parser("export", help="export the DB to CSV/JSON in out/").set_defaults(func=cmd_export)
 

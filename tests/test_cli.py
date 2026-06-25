@@ -52,3 +52,21 @@ def test_bundled_config_matches_defaults():
     shipped = json.loads(tpl.read_text())
     assert shipped["scoring"]["weights"] == config.DEFAULTS["scoring"]["weights"]
     assert shipped["routing"]["home"] == config.DEFAULTS["routing"]["home"]
+
+
+def test_stats_json_is_clean_read_only_payload(_isolated, capsys):
+    """`jobcut stats --json` prints a JSON pipeline payload (read path for Claude).
+
+    On an empty data dir the funnel is all zeros; the colors must be stripped so the
+    `funnel` entries are plain {stage, count} objects.
+    """
+    main(["init", "--no-input"])
+    capsys.readouterr()  # drain init's stdout so we parse only the stats payload
+    rc = main(["stats", "--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["total"] == 0
+    assert {"by_week", "funnel", "counts"} <= out.keys()
+    assert out["funnel"][0] == {"stage": "Applied", "count": 0}
+    # no UI hex colors leak into the agent-facing payload
+    assert "#" not in json.dumps(out)

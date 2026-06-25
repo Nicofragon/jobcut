@@ -85,6 +85,7 @@ and is just as direct.
 - Read-only commands: `jobcut unscored --json`, `jobcut surface --json`. The only
   writer is `jobcut ingest-scores`. No raw SQL, ever.
 - This skill does **not** pull from Apify (no cost). To also fetch new jobs first, use
-  the `jobcut-daily` skill, then this one to score.
+  the `jobcut-daily` skill, then this one to score. To then pick what to apply to (top
+  10) or open the console, hand off to **jobcut-review**.
 - Everything is keyed off the data dir resolved from the working directory (or
   `JOBCUT_DATA_DIR`). The skill hard-codes no profile, path, or location.

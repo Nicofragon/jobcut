@@ -132,6 +132,22 @@ All of the above — `include_titles`, skill patterns, `signals`, `dealbreakers`
 `routing` — are **derived from your `profile.md`** (Settings → Profile, or
 `POST /api/profile/derive`). Nothing is wired to a specific field.
 
+## Using jobcut with Claude
+
+jobcut ships skills so Claude (Cowork / Claude Code) can drive it for you — through
+the `jobcut` CLI, never raw SQL. Ask Claude to **run your daily search**, **score
+jobs**, tell you **what to apply to / how your pipeline is doing**, **summarize the
+market**, or **update the app**. Setup and the full skill list are in
+[`integrations/cowork/`](integrations/cowork/README.md).
+
+| Ask Claude… | Skill |
+|-------------|-------|
+| "run my daily job search" | `jobcut-daily` |
+| "score my jobs with Claude" | `jobcut-score` |
+| "what should I apply to? / how's my pipeline?" | `jobcut-review` |
+| "what's the market asking for?" | `jobcut-market` |
+| "update jobcut / I still see the old design" | `jobcut-update` |
+
 ## Cost & safety
 
 - Apify is **pay-per-event** (~$0.04–0.18 per run). `jobcut pull --read` re-downloads

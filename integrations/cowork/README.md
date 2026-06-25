@@ -1,24 +1,31 @@
-# jobcut ↔ Claude Cowork bridge (project-specific)
+# Using jobcut with Claude (Cowork / Claude Code)
 
-This folder ships **the project's own** Cowork/Claude Code skills that drive the
-`jobcut` CLI so an agent can keep the database fresh and surface results —
-**without touching SQLite directly** (every write goes through the CLI, which is
-the single schema authority).
+This folder ships **the project's own** Cowork/Claude Code skills that let Claude
+drive jobcut for you — keep the database fresh, score jobs, tell you what to apply
+to, answer questions about your data, and keep the app itself up to date.
 
-- **Project-specific, not personal.** These skills write to *this project's*
-  database at `$JOBCUT_DATA_DIR/jobcut.db`. They are generic: no hard-coded
-  profile, no Obsidian-vault paths, no personal scheduler. (Any personal v1 setup
-  a user already runs is separate and untouched.)
+The contract is simple: **Claude drives the `jobcut` CLI; it never touches SQLite
+directly.** Every write goes through the CLI, which is the single schema authority.
+
+- **Project-specific, not personal.** These skills act on *this project's* database
+  at `$JOBCUT_DATA_DIR/jobcut.db`. They're generic: no hard-coded profile, no
+  Obsidian-vault paths, no personal scheduler.
 - **CLI-only.** The skills never import jobcut as a library or run raw SQL; they
   invoke `jobcut <command>` and read its `--json` output.
 
-## Skills
+## What you can ask Claude to do
 
-| Skill | What it does | CLI it drives |
-|-------|--------------|---------------|
-| [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | Pull saved searches (local Apify client) → score → shortlist | `pull`, `unscored`/`ingest-scores` or `score`, `surface --json` |
-| [`jobcut-score`](skills/jobcut-score/SKILL.md) | Score (or re-score) jobs with Claude and write them straight to the DB — no Apify, no manual JSON | `unscored`/`surface --json`, `ingest-scores` |
-| [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs the profile | `market --json` |
+| Say this | Skill | What happens |
+|----------|-------|--------------|
+| "run my daily job search" / "pull and score new jobs" | [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | Pull saved searches (local Apify client) → score → shortlist |
+| "score my jobs with Claude" / "re-score these" | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Claude scores jobs against your profile and writes them straight to the DB |
+| "what should I apply to?" / "top 10" / "how's my pipeline this week?" / "open the console" | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** Top picks to apply, pipeline/weekly stats, or launch the web console |
+| "what's the market asking for?" / "my skill gaps" | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile |
+| "update jobcut" / "I still see the old design" | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull latest code, reinstall if deps changed, rebuild + restart the console |
+
+A normal day: **jobcut-daily** (fetch + score) → **jobcut-review** (decide what to
+apply to / open the console). **jobcut-update** keeps the install current;
+**jobcut-market** and **jobcut-score** are on-demand.
 
 ## The CLI is the database contract
 
@@ -26,21 +33,42 @@ Claude never opens `jobcut.db` or writes SQL. It reads and writes only through t
 `jobcut` CLI, so the schema stays owned by one place:
 
 - **Readers (read-only, structured JSON):**
-  `jobcut unscored --json` (jobs missing a score) ·
   `jobcut surface --json` (the ranked shortlist) ·
-  `jobcut market --json` (skill demand vs your profile).
+  `jobcut stats --json` (applications pipeline: funnel, weekly counts, stalled) ·
+  `jobcut market --json` (skill demand vs your profile) ·
+  `jobcut unscored --json` (jobs missing a score).
 - **Writers (the only commands that mutate the DB):**
   `jobcut pull` (ingest jobs from Apify) ·
   `jobcut import-jobs <file>` (upsert job rows from JSON) ·
   `jobcut ingest-scores <file>` (upsert Claude scores, tagged `backend=claude_skills`) ·
   `jobcut score` (run a built-in/rule-based scorer).
+- **Console / lifecycle (no DB writes):**
+  `jobcut serve --open` (run the API + web console, auto-rebuilds if stale) ·
+  `jobcut daily` (pull + score + surface in one — what the scheduler runs).
 
-Anything a skill needs to know about the data, it gets from a `--json` reader; anything
-it changes, it does through one of the writers. No other path touches the database.
+Anything a skill needs to know about the data, it gets from a `--json` reader;
+anything it changes, it does through one of the writers. No other path touches the DB.
+
+## One run owner (don't pay Apify twice)
+
+`jobcut pull` / `jobcut daily` trigger a **paid** Apify scrape. Exactly **one** runner
+should own a given set of searches:
+
+1. **In-app scheduler** (recommended) — **Settings → Automation** in the console
+   installs a launchd (macOS) / cron (Linux) timer that runs `jobcut daily`. Configure
+   the frequency and time from the UI; nothing to edit by hand.
+2. **jobcut-daily skill** — run on demand from Claude when you want Claude to score and
+   summarize each run.
+3. **Hand-written cron** — `jobcut daily` from your own crontab for a no-Claude run.
+
+Pick one per search. If the in-app scheduler already owns your searches, run
+`jobcut-daily` with `jobcut pull --read` (a **free** re-download of the last run) so
+you don't double-pay. (`jobcut-review`, `jobcut-score`, and `jobcut-update` are
+always free — they never scrape.)
 
 ## Install / config
 
 Full step-by-step in [`SETUP.md`](SETUP.md). In short: install jobcut, set
-`JOBCUT_DATA_DIR`, run `jobcut init`, add the Apify token, copy the skills into
-your Claude skills directory, and pick **one run owner** — this Cowork bridge **or**
-the repo's cron, not both for the same searches (so Apify isn't paid twice).
+`JOBCUT_DATA_DIR`, run `jobcut init`, add the Apify token (or do it in the onboarding
+UI), copy the skills into your Claude skills directory, and choose your run owner
+(in-app scheduler by default).

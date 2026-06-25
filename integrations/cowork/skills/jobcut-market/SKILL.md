@@ -53,3 +53,5 @@ read the database directly.
   dashboard are produced by plain `jobcut market` (not needed here).
 - Generic: no hard-coded skills or profile — everything comes from the user's
   `config/taxonomy.json` and the accumulated jobs.
+- For "what should I apply to" or pipeline stats (not market-wide demand), use
+  **jobcut-review** instead.
