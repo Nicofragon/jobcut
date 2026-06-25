@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
+  createManualApplication,
   deleteApplication,
   getApplications,
   getFunnel,
@@ -29,6 +30,7 @@ export default function ApplicationsPage() {
   const [timing, setTiming] = useState<ProcessTimingSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(() => {
     // One call each — the list endpoint already carries title/company (server-side
@@ -73,10 +75,22 @@ export default function ApplicationsPage() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Application Tracker</h1>
-        <p className="mt-1 text-on-surface-variant">How your search is actually going — at a glance.</p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-on-surface">Application Tracker</h1>
+          <p className="mt-1 text-on-surface-variant">How your search is actually going — at a glance.</p>
+        </div>
+        <button
+          onClick={() => setAdding((v) => !v)}
+          className="shrink-0 rounded-lg border border-border px-3 py-2 text-sm font-medium text-on-surface transition-colors hover:border-primary hover:text-primary"
+        >
+          + Add application
+        </button>
       </header>
+
+      {adding && (
+        <AddApplicationForm onDone={() => { setAdding(false); load(); }} onCancel={() => setAdding(false)} />
+      )}
 
       {m.total === 0 ? (
         <EmptyState />
@@ -102,6 +116,91 @@ export default function ApplicationsPage() {
         </>
       )}
     </div>
+  );
+}
+
+// ---- Add application (B-1): a role outside the scraper ----------------------
+
+const ADD_INPUT =
+  "rounded-lg border border-border bg-bg px-3 py-2 text-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-faint focus:border-primary focus:ring-1 focus:ring-primary";
+const ADD_STATUSES = [
+  { value: "applied", label: "Applied" },
+  { value: "saved", label: "Saved" },
+  { value: "screen", label: "Screening" },
+  { value: "interview", label: "Interview" },
+  { value: "offer", label: "Offer" },
+];
+
+function AddApplicationForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
+  const [url, setUrl] = useState("");
+  const [company, setCompany] = useState("");
+  const [title, setTitle] = useState("");
+  const [location, setLocation] = useState("");
+  const [status, setStatus] = useState("applied");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const canSave = company.trim().length > 0 && title.trim().length > 0;
+
+  async function save() {
+    if (!canSave || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await createManualApplication({
+        url: url.trim() || undefined,
+        company: company.trim(),
+        title: title.trim(),
+        location: location.trim() || undefined,
+        status,
+      });
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't add it");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="space-y-3 rounded-card border border-border/40 bg-surface p-5 shadow-card">
+      <div>
+        <h2 className="text-sm font-semibold text-on-surface">Add an application</h2>
+        <p className="mt-0.5 text-xs text-on-surface-variant">
+          For a role outside the scraper — a company site, Lever/Greenhouse, or an expired posting.
+          Company and title are required; the URL is optional.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <input className={ADD_INPUT} placeholder="Company *" value={company} onChange={(e) => setCompany(e.target.value)} />
+        <input className={ADD_INPUT} placeholder="Title *" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className={ADD_INPUT} placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
+        <input className={ADD_INPUT} placeholder="URL (any ATS)" value={url} onChange={(e) => setUrl(e.target.value)} />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+        Status
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className={ADD_INPUT}>
+          {ADD_STATUSES.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+      </label>
+      {err && <p className="text-sm text-[color:var(--color-accent-red,#dc2626)]">{err}</p>}
+      <div className="flex gap-2">
+        <button
+          onClick={save}
+          disabled={!canSave || busy}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? "Adding…" : "Add"}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={busy}
+          className="rounded-lg border border-border px-4 py-2 text-sm disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </section>
   );
 }
 

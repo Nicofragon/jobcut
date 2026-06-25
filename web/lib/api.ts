@@ -186,6 +186,17 @@ export const addEvent = (jobId: string, body: { kind?: string; body?: string; me
 export const deleteApplication = (jobId: string) =>
   api<{ deleted: string }>(`/applications/${jobId}`, { method: "DELETE" });
 
+// Manual entry (B-1): add a job outside the scraper + link an application, so a role
+// from a company site / Lever / Greenhouse / an expired posting cross-references instead
+// of showing a bare id. The backend derives a stable job_id (from the URL or company+title).
+export const createManualApplication = (fields: {
+  url?: string;
+  company: string;
+  title: string;
+  location?: string;
+  status?: string;
+}) => api<Application>(`/applications/manual`, { method: "POST", body: JSON.stringify(fields) });
+
 // --- onboarding: credentials, profile, config, CV ---------------------------
 
 export type Credentials = { apify_token_set: boolean; llm_key_set: boolean };
