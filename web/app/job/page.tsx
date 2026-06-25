@@ -120,6 +120,12 @@ function JobDetailView() {
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [draft, setDraft] = useState("");
   const [status, setLocalStatus] = useState<string | null>(null); // optimistic
+  // Interview process inline editor state
+  const [editing, setEditing] = useState(false);
+  const [processDraft, setProcessDraft] = useState("");
+  const [processBusy, setProcessBusy] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [justCompleted, setJustCompleted] = useState(false);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -180,27 +186,49 @@ function JobDetailView() {
     const r = await advanceProcess(id);
     load();
     if (r.completed) {
-      if (confirm("Process complete — mark this application as Offer?")) {
-        await setStatus(id, "offer");
-        load();
-      }
+      setJustCompleted(true);
     }
   }
 
-  async function onEditProcess() {
+  function openEditor(prefill: string) {
+    setProcessDraft(prefill);
+    setSuggestError(null);
+    setEditing(true);
+  }
+
+  function onEditProcess() {
     const current = parseStages(data?.application?.process_stages).join("\n");
-    const text = prompt("One stage per line:", current);
-    if (text == null) return;
-    const stages = text.split("\n").map((s) => s.trim()).filter(Boolean);
-    await setProcess(id, stages);
-    load();
+    openEditor(current);
   }
 
   async function onSuggestProcess() {
-    const { stages } = await suggestProcess(id);
-    const text = prompt("Suggested stages (edit, one per line):", stages.join("\n"));
-    if (text == null) return;
-    await setProcess(id, text.split("\n").map((s) => s.trim()).filter(Boolean));
+    setProcessBusy(true);
+    setSuggestError(null);
+    try {
+      const { stages } = await suggestProcess(id);
+      openEditor(stages.join("\n"));
+    } catch {
+      setSuggestError("Could not suggest stages — try again.");
+    } finally {
+      setProcessBusy(false);
+    }
+  }
+
+  async function onSaveProcess() {
+    const stages = processDraft.split("\n").map((s) => s.trim()).filter(Boolean);
+    setProcessBusy(true);
+    try {
+      await setProcess(id, stages);
+      setEditing(false);
+      load();
+    } finally {
+      setProcessBusy(false);
+    }
+  }
+
+  async function onMarkOffer() {
+    await setStatus(id, "offer");
+    setJustCompleted(false);
     load();
   }
 
@@ -360,46 +388,130 @@ function JobDetailView() {
           {data.application && (() => {
             const stages = parseStages(data.application.process_stages);
             const cur = data.application.process_current ?? 0;
-            if (stages.length === 0) {
-              return (
-                <div className="rounded-card border border-border/40 bg-surface p-6 shadow-card">
-                  <h2 className="mb-4 text-xl font-semibold text-on-surface">Interview process</h2>
-                  <p className="text-sm text-on-surface-variant">No process defined yet.</p>
-                  <div className="mt-3 flex gap-2">
-                    <button onClick={onEditProcess} className="rounded-lg border border-border px-3 py-1.5 text-sm">Define stages</button>
-                    <button onClick={onSuggestProcess} className="rounded-lg border border-border px-3 py-1.5 text-sm">Suggest from posting</button>
-                  </div>
-                </div>
-              );
-            }
             return (
               <div className="rounded-card border border-border/40 bg-surface p-6 shadow-card">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-semibold text-on-surface">Interview process</h2>
-                  <span className="text-xs text-on-surface-variant">
-                    Stage {Math.min(cur + (cur < stages.length ? 1 : 0), stages.length)} of {stages.length}
-                  </span>
+                  {stages.length > 0 && (
+                    <span className="text-xs text-on-surface-variant">
+                      Stage {Math.min(cur + (cur < stages.length ? 1 : 0), stages.length)} of {stages.length}
+                    </span>
+                  )}
                 </div>
-                <ol className="mt-3 space-y-1.5">
-                  {stages.map((name, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <span>{i < cur ? "✅" : i === cur ? "◉" : "○"}</span>
-                      <span className={i === cur ? "font-medium" : "text-on-surface-variant"}>{name}</span>
-                    </li>
-                  ))}
-                </ol>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={onAdvance}
-                    disabled={cur >= stages.length}
-                    className="rounded-lg bg-primary px-3 py-1.5 text-sm text-on-primary disabled:opacity-50"
-                  >
-                    Advance stage
-                  </button>
-                  <button onClick={onEditProcess} className="rounded-lg border border-border px-3 py-1.5 text-sm">
-                    Edit stages
-                  </button>
-                </div>
+
+                {/* Process-complete banner */}
+                {justCompleted && (
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3">
+                    <span className="text-sm font-medium text-on-surface">
+                      Process complete 🎉 —{" "}
+                      <button
+                        onClick={onMarkOffer}
+                        className="font-semibold text-primary underline-offset-2 hover:underline"
+                      >
+                        Mark as Offer
+                      </button>
+                    </span>
+                    <button
+                      onClick={() => setJustCompleted(false)}
+                      className="text-xs text-on-surface-faint hover:text-on-surface"
+                      aria-label="Dismiss"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                {stages.length === 0 && !editing && (
+                  <>
+                    <p className="mt-3 text-sm text-on-surface-variant">No process defined yet.</p>
+                    {suggestError && (
+                      <p className="mt-2 text-sm text-red-500">{suggestError}</p>
+                    )}
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={onEditProcess}
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm"
+                      >
+                        Define stages
+                      </button>
+                      <button
+                        onClick={onSuggestProcess}
+                        disabled={processBusy}
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacity-50"
+                      >
+                        {processBusy ? "Suggesting…" : "Suggest from posting"}
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {stages.length > 0 && !editing && (
+                  <>
+                    <ol className="mt-3 space-y-1.5">
+                      {stages.map((name, i) => (
+                        <li key={i} className="flex items-center gap-2 text-sm">
+                          <span>{i < cur ? "✅" : i === cur ? "◉" : "○"}</span>
+                          <span className={i === cur ? "font-medium" : "text-on-surface-variant"}>{name}</span>
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={onAdvance}
+                        disabled={cur >= stages.length}
+                        className="rounded-lg bg-primary px-3 py-1.5 text-sm text-on-primary disabled:opacity-50"
+                      >
+                        Advance stage
+                      </button>
+                      <button
+                        onClick={onEditProcess}
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm"
+                      >
+                        Edit stages
+                      </button>
+                      <button
+                        onClick={onSuggestProcess}
+                        disabled={processBusy}
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacity-50"
+                      >
+                        {processBusy ? "Suggesting…" : "Suggest from posting"}
+                      </button>
+                    </div>
+                    {suggestError && (
+                      <p className="mt-2 text-sm text-red-500">{suggestError}</p>
+                    )}
+                  </>
+                )}
+
+                {/* Inline editor */}
+                {editing && (
+                  <div className="mt-4 space-y-3">
+                    <textarea
+                      value={processDraft}
+                      onChange={(e) => setProcessDraft(e.target.value)}
+                      placeholder={"Recruiter screen\nTechnical\nHiring Manager\nFinal"}
+                      rows={5}
+                      className="w-full rounded-lg border border-border bg-bg p-3 text-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-faint focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
+                    <p className="text-xs text-on-surface-faint">One stage per line</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={onSaveProcess}
+                        disabled={processBusy}
+                        className="rounded-lg bg-primary px-3 py-1.5 text-sm text-on-primary disabled:opacity-50"
+                      >
+                        {processBusy ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        onClick={() => { setEditing(false); setSuggestError(null); }}
+                        disabled={processBusy}
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
