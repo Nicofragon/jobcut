@@ -13,6 +13,12 @@ no one writes raw SQL.
   scraped rows in either the flattened `pull.flatten()` shape (has ``job_id``) or
   the nested harvestapi actor shape (has ``id``). Deduped by job_id via
   `pull.aggregate_today` + `db.upsert_jobs`.
+- `ingest_events` (B-5, `jobcut ingest-events`): the *write-path bridge* — a list or
+  ``{"events": [...]}`` of application write-ops. One op per item, dispatched by the
+  fields present (``status`` → `db.set_application_status`; ``fields`` →
+  `db.update_application_fields`; ``kind`` in note/interview/next_action →
+  `db.add_event`). Lets Claude/Cowork update applications (notes, rounds, status,
+  structured fields) through the same db.py choke-points — no raw SQL.
 
 Invalid items are skipped and reported; the rest are written.
 """
@@ -21,6 +27,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 from pathlib import Path
 
 from . import db
@@ -146,6 +153,81 @@ def import_jobs(path, conn=None) -> dict:
         # rows that collapsed onto an already-counted job_id within this file
         skipped = len(flat_rows) - len(today_agg)
         return {"new": inserted, "updated": updated, "skipped": skipped, "invalid": invalid}
+    finally:
+        if own:
+            conn.close()
+
+
+# --- application write-ops (B-5) --------------------------------------------
+
+_EVENT_KINDS = ("note", "interview", "next_action")
+
+
+def _norm_date(value):
+    """date-only 'YYYY-MM-DD' -> '...T12:00:00' (stable same-day ordering, matches
+    advance_process); pass through full ISO; None -> None (db defaults to now)."""
+    v = str(value or "").strip()
+    if not v:
+        return None
+    return f"{v}T12:00:00" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) else v
+
+
+def load_events(data) -> list[dict]:
+    """Coerce the parsed JSON into a list of write-ops (list or {"events": [...]})."""
+    if isinstance(data, dict):
+        data = data.get("events", [])
+    if not isinstance(data, list):
+        raise ValueError('expected a JSON list of events or {"events": [...]}')
+    return data
+
+
+def ingest_events(path, conn=None) -> dict:
+    """Apply a JSON list of write ops to applications. One op per item, dispatched by
+    the fields present: status -> set_application_status; else fields -> update_application_fields;
+    else kind -> add_event. Lenient: skip + report. Returns a summary."""
+    own = conn is None
+    conn = conn or db.connect()
+    try:
+        entries = load_events(json.loads(Path(path).read_text()))
+        known = {r["job_id"] for r in conn.execute("SELECT job_id FROM jobs").fetchall()}
+        written, errors, unknown = 0, [], set()
+        for i, e in enumerate(entries):
+            if not isinstance(e, dict):
+                errors.append(f"entry {i}: not an object")
+                continue
+            jid = str(e.get("job_id", "")).strip()
+            if not jid:
+                errors.append(f"entry {i}: missing job_id")
+                continue
+            when = _norm_date(e.get("date"))
+            if jid not in known:
+                unknown.add(jid)
+            # (a) status change — the funnel choke-point (records status_change itself)
+            if e.get("status"):
+                db.set_application_status(conn, jid, str(e["status"]), now=when)
+                written += 1
+                continue
+            # (b) structured fields patch
+            if isinstance(e.get("fields"), dict):
+                updated = db.update_application_fields(conn, jid, e["fields"], now=when)
+                if updated is None:
+                    errors.append(f"entry {i} (job {jid}): no application to patch")
+                else:
+                    written += 1
+                continue
+            # (c) timeline event
+            kind = str(e.get("kind", "")).strip()
+            if kind in _EVENT_KINDS:
+                meta = e.get("meta")
+                meta_s = json.dumps(meta, ensure_ascii=False) if isinstance(meta, dict) else ""
+                db.add_event(conn, jid, kind, body=str(e.get("body", "") or ""),
+                             meta=meta_s, now=when)
+                written += 1
+                continue
+            errors.append(f"entry {i} (job {jid}): no actionable op "
+                          "(need status, fields, or kind in note/interview/next_action)")
+        return {"written": written, "skipped": len(errors), "errors": errors,
+                "unknown_job_ids": sorted(unknown)}
     finally:
         if own:
             conn.close()

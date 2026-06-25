@@ -20,6 +20,7 @@ directly.** Every write goes through the CLI, which is the single schema authori
 | "run my daily job search" / "pull and score new jobs" | [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | Pull saved searches (local Apify client) → score → shortlist |
 | "score my jobs with Claude" / "re-score these" | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Claude scores jobs against your profile and writes them straight to the DB |
 | "what should I apply to?" / "top 10" / "how's my pipeline this week?" / "open the console" | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** Top picks to apply, pipeline/weekly stats, or launch the web console |
+| "Preply passed to R3, scheduled the 30th" / "add a note to Kiwi" / "mark Acme rejected" / "bump X to high priority" | [`jobcut-track`](skills/jobcut-track/SKILL.md) | **Write.** Update an application — note, interview round, status, or fields — via `ingest-events` |
 | "what's the market asking for?" / "my skill gaps" | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile |
 | "update jobcut" / "I still see the old design" | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull latest code, reinstall if deps changed, rebuild + restart the console |
 
@@ -41,6 +42,7 @@ Claude never opens `jobcut.db` or writes SQL. It reads and writes only through t
   `jobcut pull` (ingest jobs from Apify) ·
   `jobcut import-jobs <file>` (upsert job rows from JSON) ·
   `jobcut ingest-scores <file>` (upsert Claude scores, tagged `backend=claude_skills`) ·
+  `jobcut ingest-events <file>` (apply application write-ops: notes, interview rounds, status, fields) ·
   `jobcut score` (run a built-in/rule-based scorer).
 - **Console / lifecycle (no DB writes):**
   `jobcut serve --open` (run the API + web console, auto-rebuilds if stale) ·
