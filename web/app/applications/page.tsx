@@ -85,13 +85,7 @@ export default function ApplicationsPage() {
           <KpiRow m={m} />
           <ActivityTrend labels={m.weekLabels} values={m.weekSeries} />
           <FunnelPanel m={m} stalled={funnel.stalled_count ?? 0} dormant={funnel.dormant_count ?? 0} />
-          <InterviewFunnelPanel rows={ivFunnel} />
-          {timing && timing.processes > 0 && (
-            <p className="mt-2 text-xs text-on-surface-variant">
-              Avg process {Math.round(timing.avg_duration_days!)} days · avg gap{" "}
-              {Math.round(timing.avg_gap_days!)} days · {timing.processes} processes
-            </p>
-          )}
+          <InterviewFunnelPanel rows={ivFunnel} timing={timing} />
         </>
       )}
 
@@ -608,8 +602,15 @@ function FunnelPanel({ m, stalled, dormant }: { m: Metrics; stalled: number; dor
 
 // ---- Interview funnel (by interview stage index) ----------------------------
 
-function InterviewFunnelPanel({ rows }: { rows: InterviewFunnelRow[] }) {
-  if (rows.length === 0) return null;
+function InterviewFunnelPanel({
+  rows,
+  timing,
+}: {
+  rows: InterviewFunnelRow[];
+  timing: ProcessTimingSummary | null;
+}) {
+  const hasTiming = !!timing && timing.processes > 0;
+  if (rows.length === 0 && !hasTiming) return null;
   const max = rows[0]?.reached || 1;
   return (
     <section className="mt-8 rounded-card border border-border/40 bg-surface p-6">
@@ -628,6 +629,13 @@ function InterviewFunnelPanel({ rows }: { rows: InterviewFunnelRow[] }) {
           </div>
         ))}
       </div>
+      {hasTiming && (
+        <div className="mt-4 border-t border-border/40 pt-3 text-xs text-on-surface-variant">
+          <span className="font-medium text-on-surface">Timing</span> · avg{" "}
+          {Math.round(timing!.avg_duration_days!)} days end-to-end · {Math.round(timing!.avg_gap_days!)} days
+          between rounds · {timing!.processes} {timing!.processes === 1 ? "process" : "processes"}
+        </div>
+      )}
     </section>
   );
 }

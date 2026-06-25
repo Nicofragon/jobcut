@@ -106,6 +106,22 @@ function eventLabel(e: AppEvent): string {
     const to = STATUS_LABEL[e.to_status ?? ""] ?? e.to_status ?? "";
     return e.from_status ? `Moved to ${to}` : `Started tracking — ${to}`;
   }
+  if (e.kind === "interview") {
+    // The round/stage lives in meta {stage, index} — surface it so a dated round
+    // reads "Interview · R3 · Hiring Manager", not a bare "interview".
+    let stage: string | undefined;
+    let index: number | undefined;
+    try {
+      const m = JSON.parse(e.meta || "{}");
+      stage = typeof m.stage === "string" ? m.stage : undefined;
+      index = typeof m.index === "number" ? m.index : undefined;
+    } catch {
+      /* meta absent or malformed — fall back to a plain label */
+    }
+    const tag = [index ? `R${index}` : null, stage].filter(Boolean).join(" · ");
+    const head = tag ? `Interview · ${tag}` : "Interview";
+    return e.body ? `${head} — ${e.body}` : head;
+  }
   return e.body || e.kind;
 }
 
