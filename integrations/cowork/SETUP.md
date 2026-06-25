@@ -12,13 +12,14 @@ top-to-bottom and have a working bridge.
 
 ## 1. What you're installing
 
-Five skills (each a folder under [`skills/`](skills/)):
+Six skills (each a folder under [`skills/`](skills/)):
 
 | Skill | What it does |
 |-------|--------------|
 | [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | `jobcut pull` each saved search (local Apify client, no MCP) → score → `surface` the top matches |
 | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Score (or re-score) jobs already in the DB with Claude, written straight back via `ingest-scores` — no Apify, no manual JSON |
 | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** What to apply to (top 10), pipeline/weekly stats (`stats --json`), or open the web console (`serve --open`) |
+| [`jobcut-track`](skills/jobcut-track/SKILL.md) | **Write.** Update an application from chat — note, interview round, status, or fields — written back via `ingest-events` |
 | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile (`market --json`) |
 | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull the latest code, reinstall if deps changed, rebuild + restart the console (fixes "still see the old design") |
 
@@ -39,10 +40,11 @@ Copy the skill folders into your Claude skills directory (for Claude Code that's
 `~/.claude/skills/`; Cowork uses the same per-user skills location):
 
 ```bash
-# from the repo root — copy all five
+# from the repo root — copy all six
 cp -R integrations/cowork/skills/jobcut-daily   ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-score   ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-review  ~/.claude/skills/
+cp -R integrations/cowork/skills/jobcut-track   ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-market  ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-update  ~/.claude/skills/
 ```
@@ -98,6 +100,9 @@ In Claude (Cowork/Code), just ask:
   and writes them back (no Apify, no manual JSON).
 - **“what should I apply to today?” / “top 10” / “how's my pipeline this week?” / “open
   the console”** → runs `jobcut-review` (read-only; no Apify cost).
+- **“Preply passed to R3, scheduled the 30th” / “add a note to Kiwi” / “mark Acme
+  rejected” / “bump X to high priority”** → runs `jobcut-track`: updates the application
+  (note, interview round, status, or fields) via `ingest-events`.
 - **“run jobcut-market”** → shows skill demand, your gaps, and segment mix.
 - **“update jobcut” / “I still see the old design”** → runs `jobcut-update`: pulls the
   latest code, rebuilds, and restarts the console.
@@ -109,8 +114,8 @@ jobcut surface --json   # the ranked shortlist as JSON
 jobcut market  --json   # the market summary as JSON
 ```
 
-Both are read-only. The only writers are `import-jobs`, `ingest-scores`, and
-`score` — all invoked by the skills via the CLI.
+Both are read-only. The only writers are `import-jobs`, `ingest-scores`,
+`ingest-events`, and `score` — all invoked by the skills via the CLI.
 
 ---
 

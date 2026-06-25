@@ -142,6 +142,28 @@ def cmd_ingest_scores(args) -> int:
     return 0
 
 
+def cmd_ingest_events(args) -> int:
+    """Apply application write-ops from a JSON file (e.g. a Claude/Cowork tracking skill)."""
+    from . import ingest
+    try:
+        summary = ingest.ingest_events(args.json)
+    except FileNotFoundError:
+        print(f"ingest-events: file not found: {args.json}")
+        return 1
+    except ValueError as exc:  # bad JSON or wrong shape (JSONDecodeError is a ValueError)
+        print(f"ingest-events: invalid events file ({exc})")
+        return 1
+    msg = f"ingest-events · wrote {summary['written']} update(s)"
+    if summary["skipped"]:
+        msg += f", skipped {summary['skipped']} invalid"
+    if summary["unknown_job_ids"]:
+        msg += f", {len(summary['unknown_job_ids'])} job_id(s) not in the jobs table"
+    print(msg)
+    for err in summary["errors"]:
+        print(f"  · skipped: {err}")
+    return 0
+
+
 def cmd_import_jobs(args) -> int:
     """Upsert scraped job rows from a JSON file (flattened or nested actor format)."""
     from . import ingest
@@ -514,6 +536,12 @@ def build_parser() -> argparse.ArgumentParser:
     pis.add_argument("--backend", default="claude_skills",
                      help="label the source backend for these scores (default: claude_skills)")
     pis.set_defaults(func=cmd_ingest_scores)
+
+    pie = sub.add_parser("ingest-events",
+                         help="apply application write-ops from a JSON file (notes, rounds, status, fields)")
+    pie.add_argument("json", help='path to JSON: a list of {job_id, status?|fields?|kind+body+meta?, date?} '
+                                  'or {"events": [...]}')
+    pie.set_defaults(func=cmd_ingest_events)
 
     pij = sub.add_parser("import-jobs",
                          help="upsert scraped job rows from a JSON file (no scrape; for a bridge agent)")
