@@ -127,3 +127,21 @@ def test_raw_crud_still_intact():
     assert c.post("/api/searches", json={"name": "raw1", "input": raw_input}).status_code == 200
     assert c.get("/api/searches/raw1").json()["input"] == raw_input
     assert c.delete("/api/searches/raw1").json() == {"deleted": "raw1"}
+
+
+def test_preview_returns_actor_input_without_writing():
+    c = _client()
+    payload = {"name": "scratch", "titles": ["Data Analyst"],
+               "locations": ["European Economic Area"], "work_types": ["remote"],
+               "employment_types": ["full-time"], "max_items": 65, "posted_within": "week"}
+    r = c.post("/api/searches/preview", json=payload)
+    assert r.status_code == 200
+    actor = r.json()
+    # exact actor input, geoIds resolved server-side from the location name
+    assert actor["geoIds"] == ["91000000"]
+    assert actor["jobTitles"] == ["Data Analyst"]
+    assert actor["postedLimit"] == "week" and actor["maxItems"] == 65
+    assert actor["sortBy"] == "relevance"
+    # preview is read-only — it must not have created a searches/scratch.json
+    assert c.get("/api/searches/scratch").status_code == 404
+    assert "scratch" not in [s["name"] for s in c.get("/api/searches/structured").json()]

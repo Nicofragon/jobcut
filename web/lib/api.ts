@@ -303,6 +303,9 @@ export const createStructuredSearch = (s: Partial<StructuredSearch>) =>
   api<StructuredSearch>("/searches/structured", { method: "POST", body: JSON.stringify(s) });
 export const updateStructuredSearch = (name: string, s: Partial<StructuredSearch>) =>
   api<StructuredSearch>(`/searches/structured/${name}`, { method: "PUT", body: JSON.stringify(s) });
+// Live, read-only conversion to the exact actor input (geoIds resolved server-side).
+export const previewActorInput = (s: Partial<StructuredSearch>) =>
+  api<Record<string, unknown>>("/searches/preview", { method: "POST", body: JSON.stringify(s) });
 
 // Scoring backends (B3) — choice-card data (recommended/order/usable/reason).
 export type ScoringBackend = {

@@ -94,6 +94,14 @@ def delete_structured(name: str):
     return {"deleted": name}
 
 
+@router.post("/preview")
+def preview_actor_input(body: searches_mod.StructuredSearch):
+    """Convert a (possibly unsaved) structured search to the exact actor input we'd
+    send — read-only, writes nothing. Powers the live "what we send" preview so the
+    JSON always reflects the fields the user typed/selected (geoIds resolved here)."""
+    return searches_mod.to_actor_input(body)
+
+
 @router.get("/{name}")
 def get_search(name: str):
     p = _path(name)

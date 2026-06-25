@@ -5,9 +5,8 @@ import {
   ApiError,
   createStructuredSearch,
   deleteSearch,
-  listSearches,
   listStructuredSearches,
-  updateSearch,
+  previewActorInput,
   updateStructuredSearch,
   type StructuredSearch,
 } from "@/lib/api";
@@ -19,19 +18,20 @@ import { ErrorNote } from "@/components/States";
 
 export default function SearchesPage() {
   const [items, setItems] = useState<StructuredSearch[]>([]);
-  const [raw, setRaw] = useState<Record<string, unknown>>({});
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    Promise.all([listStructuredSearches(), listSearches()])
-      .then(([structured, rawList]) => {
+    listStructuredSearches()
+      .then((structured) => {
         setItems(structured);
-        setRaw(Object.fromEntries(rawList.map((r) => [r.name, r.input])));
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "failed to load"));
   }, []);
   useEffect(load, [load]);
+
+  const examples = items.filter((s) => isExample(s.name));
+  const real = items.filter((s) => !isExample(s.name));
 
   return (
     <div className="space-y-6">
@@ -47,9 +47,19 @@ export default function SearchesPage() {
 
       {error && <ErrorNote>{error}</ErrorNote>}
 
+      {examples.length > 0 && real.length === 0 && (
+        <div className="rounded-card border border-[color:var(--color-accent-amber)]/40 bg-[color:var(--color-accent-amber)]/10 p-4 text-sm text-on-surface">
+          <p className="font-medium">These are example searches to get you started.</p>
+          <p className="mt-1 text-on-surface-variant">
+            Edit one to make it yours (change the titles and add your locations), or delete it and
+            create your own below. Your real searches stay private — only the examples are shipped.
+          </p>
+        </div>
+      )}
+
       <div className="grid gap-3">
         {items.map((s) => (
-          <SearchCard key={s.name} search={s} raw={raw[s.name ?? ""]} onChanged={load} />
+          <SearchCard key={s.name} search={s} onChanged={load} />
         ))}
         {items.length === 0 && !error && (
           <p className="rounded-card border border-dashed border-border bg-surface p-6 text-center text-sm text-on-surface-variant">
@@ -63,27 +73,40 @@ export default function SearchesPage() {
   );
 }
 
-type Form = { titles: string[]; locations: string[]; work_types: string[]; geo_ids: string[] };
+type Form = {
+  titles: string[];
+  locations: string[];
+  work_types: string[];
+  employment_types: string[];
+  posted_within: string;
+  max_items: number | null;
+  geo_ids: string[];
+};
 
-function SearchCard({
-  search,
-  raw,
-  onChanged,
-}: {
-  search: StructuredSearch;
-  raw: unknown;
-  onChanged: () => void;
-}) {
+function formFrom(s: StructuredSearch): Form {
+  return {
+    titles: s.titles,
+    locations: s.locations,
+    work_types: s.work_types,
+    employment_types: s.employment_types,
+    posted_within: s.posted_within || "24h",
+    max_items: s.max_items,
+    geo_ids: s.geo_ids,
+  };
+}
+
+function isExample(name: string | null): boolean {
+  return !!name && name.startsWith("example-");
+}
+
+function SearchCard({ search, onChanged }: { search: StructuredSearch; onChanged: () => void }) {
   const name = search.name ?? "";
-  const [form, setForm] = useState<Form>({
-    titles: search.titles,
-    locations: search.locations,
-    work_types: search.work_types,
-    geo_ids: search.geo_ids,
-  });
+  const [form, setForm] = useState<Form>(formFrom(search));
   const [needsGeoid, setNeedsGeoid] = useState(search.needs_geoid);
   const [msg, setMsg] = useState<string | null>(null);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm({ ...form, [k]: v });
+
+  const ready = form.titles.length > 0 && !needsGeoid;
 
   async function save() {
     try {
@@ -101,8 +124,12 @@ function SearchCard({
 
   return (
     <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="font-semibold text-on-surface">{name}</h3>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold text-on-surface">{name}</h3>
+          {isExample(name) && <Badge tone="neutral">Example</Badge>}
+          <StatusPill ready={ready} />
+        </div>
         <div className="flex items-center gap-2">
           {msg && <span className="text-xs text-on-surface-variant">{msg}</span>}
           <button onClick={save} className={btnPrimary}>
@@ -116,11 +143,39 @@ function SearchCard({
           </button>
         </div>
       </div>
+      <p className="mb-4 text-xs text-on-surface-variant">{summarize(form)}</p>
       <SearchFields form={form} set={set} needsGeoid={needsGeoid} />
-      <RawAdvanced name={name} raw={raw} onSaved={onChanged} />
+      <ActorPreview form={form} />
     </div>
   );
 }
+
+function summarize(form: Form): string {
+  const titles = form.titles.length
+    ? `${form.titles.length} title${form.titles.length > 1 ? "s" : ""}`
+    : "no titles yet";
+  const where = form.locations.length
+    ? form.locations.join(", ")
+    : form.geo_ids.length
+      ? `${form.geo_ids.length} geoId${form.geo_ids.length > 1 ? "s" : ""}`
+      : "no location yet";
+  const work = form.work_types.length ? form.work_types.join(" / ") : "any work type";
+  return `${titles} · ${where} · ${work}`;
+}
+
+const POSTED_OPTIONS = [
+  { value: "1h", label: "Last hour" },
+  { value: "24h", label: "Last 24 hours" },
+  { value: "week", label: "Last week" },
+  { value: "month", label: "Last month" },
+];
+const EMPLOYMENT_OPTIONS = [
+  { value: "full-time", label: "Full-time" },
+  { value: "part-time", label: "Part-time" },
+  { value: "contract", label: "Contract" },
+  { value: "internship", label: "Internship" },
+  { value: "temporary", label: "Temporary" },
+];
 
 function SearchFields({
   form,
@@ -143,6 +198,37 @@ function SearchFields({
       <Labeled label="Work type">
         <WorkTypeToggle values={form.work_types} onChange={(v) => set("work_types", v)} />
       </Labeled>
+      <Labeled label="Employment type">
+        <MultiToggle
+          options={EMPLOYMENT_OPTIONS}
+          values={form.employment_types}
+          onChange={(v) => set("employment_types", v)}
+        />
+      </Labeled>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Labeled label="Posted within">
+          <select
+            value={form.posted_within}
+            onChange={(e) => set("posted_within", e.target.value)}
+            className={inputCls}
+          >
+            {POSTED_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+        <Labeled label="Max results per run" hint="Higher = more coverage, slightly higher Apify cost.">
+          <input
+            type="number"
+            min={1}
+            value={form.max_items ?? 50}
+            onChange={(e) => set("max_items", e.target.value ? Number(e.target.value) : null)}
+            className={inputCls}
+          />
+        </Labeled>
+      </div>
 
       {needsGeoid && (
         <div className="rounded-lg border border-[color:var(--color-accent-amber)]/40 bg-[color:var(--color-accent-amber)]/10 p-3 text-sm text-on-surface">
@@ -165,43 +251,65 @@ function SearchFields({
   );
 }
 
-function RawAdvanced({ name, raw, onSaved }: { name: string; raw: unknown; onSaved: () => void }) {
-  const [text, setText] = useState(JSON.stringify(raw ?? {}, null, 2));
-  const [msg, setMsg] = useState<string | null>(null);
-  async function save() {
+// Live, read-only "what we send" preview. Updates (debounced) as the form changes, so
+// the JSON always reflects the typed/selected fields — geoIds resolved server-side.
+function ActorPreview({ form }: { form: Form }) {
+  const [json, setJson] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      previewActorInput(form)
+        .then((a) => alive && setJson(JSON.stringify(a, null, 2)))
+        .catch(() => alive && setJson("// preview unavailable"));
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [form]);
+
+  async function copy() {
     try {
-      await updateSearch(name, JSON.parse(text));
-      setMsg("saved ✓");
-      onSaved();
-    } catch (e) {
-      setMsg(e instanceof SyntaxError ? "invalid JSON" : "save failed");
+      await navigator.clipboard.writeText(json);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable — ignore */
     }
-    setTimeout(() => setMsg(null), 2000);
   }
+
   return (
     <details className="mt-4 border-t border-border pt-3">
       <summary className="cursor-pointer text-sm text-on-surface-faint hover:text-on-surface-variant">
-        Advanced: edit raw JSON (power users)
+        What we send to the job source (updates as you edit)
       </summary>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={8}
-        className="mt-2 w-full rounded-lg border border-border bg-surface-alt px-3 py-2 font-mono text-xs text-on-surface outline-none focus:border-primary"
-      />
-      <div className="mt-2 flex items-center gap-2">
-        <button onClick={save} className={btnGhost}>
-          Save raw
+      <div className="mt-2 flex items-center justify-between">
+        <p className="text-xs text-on-surface-variant">Read-only — generated from the fields above.</p>
+        <button onClick={copy} className="text-xs font-medium text-primary hover:underline">
+          {copied ? "Copied ✓" : "Copy"}
         </button>
-        {msg && <span className="text-xs text-on-surface-variant">{msg}</span>}
       </div>
+      <pre className="mt-2 w-full overflow-x-auto rounded-lg border border-border bg-surface-alt px-3 py-2 font-mono text-xs text-on-surface-variant">
+        {json || "…"}
+      </pre>
     </details>
   );
 }
 
 function NewSearch({ onCreated }: { onCreated: () => void }) {
+  const empty: Form = {
+    titles: [],
+    locations: [],
+    work_types: [],
+    employment_types: [],
+    posted_within: "24h",
+    max_items: null,
+    geo_ids: [],
+  };
   const [name, setName] = useState("");
-  const [form, setForm] = useState<Form>({ titles: [], locations: [], work_types: [], geo_ids: [] });
+  const [form, setForm] = useState<Form>(empty);
   const [msg, setMsg] = useState<string | null>(null);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm({ ...form, [k]: v });
 
@@ -209,7 +317,7 @@ function NewSearch({ onCreated }: { onCreated: () => void }) {
     try {
       await createStructuredSearch({ name: name.trim(), ...form });
       setName("");
-      setForm({ titles: [], locations: [], work_types: [], geo_ids: [] });
+      setForm(empty);
       setMsg(null);
       onCreated();
     } catch (e) {
@@ -243,12 +351,63 @@ function NewSearch({ onCreated }: { onCreated: () => void }) {
   );
 }
 
+// --- small UI bits ----------------------------------------------------------
+
+function MultiToggle({
+  options,
+  values,
+  onChange,
+}: {
+  options: { value: string; label: string }[];
+  values: string[];
+  onChange: (v: string[]) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = values.includes(o.value);
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(on ? values.filter((v) => v !== o.value) : [...values, o.value])}
+            className={`rounded-full border px-3 py-1 text-sm font-medium transition-colors ${
+              on
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-on-surface-variant hover:bg-surface-alt"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatusPill({ ready }: { ready: boolean }) {
+  return ready ? (
+    <Badge tone="green">Ready</Badge>
+  ) : (
+    <Badge tone="amber">Needs setup</Badge>
+  );
+}
+
+function Badge({ tone, children }: { tone: "green" | "amber" | "neutral"; children: React.ReactNode }) {
+  const cls = {
+    green: "border-[color:var(--color-accent-green)]/40 bg-[color:var(--color-accent-green)]/10 text-[color:var(--color-accent-green)]",
+    amber: "border-[color:var(--color-accent-amber)]/40 bg-[color:var(--color-accent-amber)]/10 text-[color:var(--color-accent-amber)]",
+    neutral: "border-border bg-surface-alt text-on-surface-variant",
+  }[tone];
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>{children}</span>
+  );
+}
+
 const inputCls =
   "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary placeholder:text-on-surface-faint";
 const btnPrimary =
   "rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-on-primary shadow-card transition-colors hover:bg-primary-hover disabled:opacity-50";
-const btnGhost =
-  "rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-alt";
 
 function Labeled({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
