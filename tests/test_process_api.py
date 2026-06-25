@@ -61,3 +61,53 @@ def test_suggest_returns_stages(client, monkeypatch):
 
 def test_suggest_404_when_no_job(client):
     assert client.post("/api/applications/999/process/suggest").status_code == 404
+
+
+def _seed_two_dated_rounds(client):
+    client.put("/api/applications/1/process",
+               json={"stages": ["R1", "R2", "R3"], "current": 0})
+    client.post("/api/applications/1/process/advance", json={"date": "2026-06-01"})
+    client.post("/api/applications/1/process/advance", json={"date": "2026-06-15"})
+
+
+def test_process_timing_per_app(client):
+    _seed_two_dated_rounds(client)
+    r = client.get("/api/applications/1/process/timing")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rounds"] == 2
+    assert body["duration_days"] == 14
+    assert body["avg_gap_days"] == 14.0
+    assert body["gaps_days"] == [14]
+
+
+def test_process_timing_per_app_null_under_two_rounds(client):
+    client.put("/api/applications/1/process",
+               json={"stages": ["R1", "R2"], "current": 0})
+    client.post("/api/applications/1/process/advance", json={"date": "2026-06-01"})
+    r = client.get("/api/applications/1/process/timing")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+def test_process_timing_per_app_404(client):
+    assert client.get("/api/applications/999/process/timing").status_code == 404
+
+
+def test_process_timing_summary(client):
+    _seed_two_dated_rounds(client)
+    r = client.get("/api/applications/process-timing")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["processes"] == 1
+    assert body["avg_duration_days"] == 14.0
+    assert body["avg_gap_days"] == 14.0
+
+
+def test_process_timing_summary_not_swallowed_by_job_id_route(client):
+    # The static /process-timing route must win over /{job_id}; with no qualifying
+    # process it returns the summary shape (processes=0), never a 404 or an app row.
+    r = client.get("/api/applications/process-timing")
+    assert r.status_code == 200
+    assert r.json() == {
+        "processes": 0, "avg_duration_days": None, "avg_gap_days": None}

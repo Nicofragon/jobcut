@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 import sqlite3
 
 import pandas as pd
@@ -451,6 +452,10 @@ def advance_process(conn: sqlite3.Connection, job_id: str, note: str = "",
     if not stages:
         return None
     cur = int(app.get("process_current") or 0)
+    # Normalize a date-only `date` (YYYY-MM-DD) to noon so same-day rounds order
+    # stably against other events; a `date` already carrying `T…` is left as-is.
+    if date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        date = f"{date}T12:00:00"
     ts = date or now or datetime.datetime.now().isoformat(timespec="seconds")
     event = None
     if cur < len(stages):
@@ -674,3 +679,53 @@ def interview_funnel(conn: sqlite3.Connection) -> list[dict]:
         conv = (nxt / reached[i]) if (nxt is not None and reached[i]) else None
         out.append({"stage": n, "reached": reached[i], "conversion": conv})
     return out
+
+
+def _round_dates(conn, job_id):
+    """Sorted list of date objects for an app's kind='interview' events (day granularity)."""
+    rows = conn.execute(
+        "SELECT ts FROM application_events WHERE job_id = ? AND kind = 'interview' ORDER BY ts",
+        (str(job_id),)).fetchall()
+    out = []
+    for r in rows:
+        ts = (r["ts"] or "")[:10]
+        try:
+            out.append(datetime.date.fromisoformat(ts))
+        except ValueError:
+            continue
+    return out
+
+
+def process_timing(conn: sqlite3.Connection, job_id: str) -> dict | None:
+    """Per-application interview timing from kind='interview' event dates. None if < 2 rounds."""
+    dates = _round_dates(conn, job_id)
+    if len(dates) < 2:
+        return None
+    gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+    duration = (dates[-1] - dates[0]).days
+    return {
+        "rounds": len(dates),
+        "first": dates[0].isoformat(),
+        "last": dates[-1].isoformat(),
+        "duration_days": duration,
+        "gaps_days": gaps,
+        "avg_gap_days": duration / (len(dates) - 1),
+    }
+
+
+def process_timing_summary(conn: sqlite3.Connection) -> dict:
+    """Aggregate timing across apps with >= 2 interview rounds."""
+    job_ids = [r["job_id"] for r in conn.execute(
+        "SELECT DISTINCT job_id FROM application_events WHERE kind = 'interview'").fetchall()]
+    durations, avg_gaps = [], []
+    for jid in job_ids:
+        t = process_timing(conn, jid)
+        if t is not None:
+            durations.append(t["duration_days"])
+            avg_gaps.append(t["avg_gap_days"])
+    n = len(durations)
+    return {
+        "processes": n,
+        "avg_duration_days": (sum(durations) / n) if n else None,
+        "avg_gap_days": (sum(avg_gaps) / n) if n else None,
+    }
