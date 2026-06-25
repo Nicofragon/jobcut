@@ -231,6 +231,27 @@ export const getConfig = () => api<Record<string, unknown>>("/config");
 export const putConfig = (config: Record<string, unknown>) =>
   api<Record<string, unknown>>("/config", { method: "PUT", body: JSON.stringify({ config }) });
 
+// --- schedule (automation) --------------------------------------------------
+export type Schedule = {
+  enabled: boolean;
+  frequency: "daily" | "weekdays" | "every_n";
+  interval_days: number;
+  hour: number;
+  minute: number;
+  platform: string;
+  supported: boolean;
+  installed: boolean;
+  command: string;
+};
+export const getSchedule = () => api<Schedule>("/schedule");
+export const putSchedule = (body: {
+  enabled: boolean;
+  frequency: string;
+  interval_days: number;
+  hour: number;
+  minute: number;
+}) => api<Schedule>("/schedule", { method: "PUT", body: JSON.stringify(body) });
+
 export const draftProfile = (text: string) =>
   api<{ profile_md: string; source: string }>("/profile/from-cv", {
     method: "POST",

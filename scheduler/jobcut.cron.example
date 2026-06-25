@@ -1,4 +1,7 @@
-# Linux cron template for a daily jobcut run.
+# Linux cron template for the daily jobcut run.
+#
+# Easiest path: set this up from the console (Settings → Automation) — it installs
+# the crontab entry for you. This template is for doing it by hand.
 #
 # SETUP:
 #   1. Replace the placeholders with your absolute paths.
@@ -7,6 +10,7 @@
 #   {{JOBCUT_BIN}} = output of `which jobcut` (e.g. /home/you/.venv/bin/jobcut)
 #   {{DATA_DIR}}     = your data dir (holds searches/, config/, the .db and out/)
 #
-# Runs every day at 07:20. Use `pull` (no --read) only when you intend a paid scrape.
+# `jobcut daily` = pull + score + surface in one (a PAID Apify scrape). Add `--read`
+# for a FREE re-download (dev). Runs every day at 07:20.
 
-20 7 * * *  JOBCUT_DATA_DIR={{DATA_DIR}} {{JOBCUT_BIN}} pull --read >> {{DATA_DIR}}/jobcut.log 2>&1
+20 7 * * *  JOBCUT_DATA_DIR={{DATA_DIR}} {{JOBCUT_BIN}} daily >> {{DATA_DIR}}/jobcut.daily.log 2>&1

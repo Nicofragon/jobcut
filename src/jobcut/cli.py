@@ -209,6 +209,36 @@ def cmd_market(args) -> int:
     return 0
 
 
+def cmd_daily(args) -> int:
+    """The one-shot the scheduler runs: pull (paid unless --read) + score + surface.
+
+    With `--every N` it no-ops unless at least N days have passed since the last
+    pull — that's how an "every N days" schedule is enforced while the OS timer
+    stays a simple daily trigger.
+    """
+    import datetime
+    import json
+    from . import pull, score, surface
+
+    every = int(getattr(args, "every", 0) or 0)
+    if every > 1 and not args.read and pull.RUNS_SIDECAR.exists():
+        try:
+            last = json.loads(pull.RUNS_SIDECAR.read_text()).get("date")
+            if last:
+                days = (datetime.date.today() - datetime.date.fromisoformat(last)).days
+                if days < every:
+                    print(f"daily · skipped — last pull {days}d ago (interval is every {every}d)")
+                    return 0
+        except Exception:
+            pass  # any parse issue → just run
+
+    pull.main(["--read"] if args.read else [])
+    score.run()
+    surface.main()
+    print("daily · pull + score + surface complete")
+    return 0
+
+
 def cmd_export(args) -> int:
     from . import export
     export.main()
@@ -375,6 +405,11 @@ def build_parser() -> argparse.ArgumentParser:
     psf = sub.add_parser("surface", help="write the ranked shortlist to out/")
     psf.add_argument("--json", action="store_true", help="print the shortlist as JSON to stdout (read-only)")
     psf.set_defaults(func=cmd_surface)
+
+    pdl = sub.add_parser("daily", help="pull + score + surface in one (what the scheduler runs)")
+    pdl.add_argument("--read", action="store_true", help="re-download the last run (FREE) instead of a paid scrape")
+    pdl.add_argument("--every", type=int, default=0, help="only run if >= N days since the last pull (for 'every N days' schedules)")
+    pdl.set_defaults(func=cmd_daily)
 
     pm = sub.add_parser("market", help="write the market-gaps report and dashboard")
     pm.add_argument("--json", action="store_true", help="print the market summary as JSON to stdout (read-only)")

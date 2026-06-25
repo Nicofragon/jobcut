@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  macOS launchd template for a daily jobcut run.
+  macOS launchd template for the daily jobcut run.
+
+  Easiest path: set this up from the console (Settings → Automation) — it writes
+  and loads this agent for you. This template is for doing it by hand.
 
   SETUP:
     1. Replace every {{...}} placeholder below with absolute paths for YOUR machine.
@@ -18,8 +21,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>{{JOBCUT_BIN}}</string>
-        <string>pull</string>
-        <string>--read</string>
+        <string>daily</string>
     </array>
     <key>WorkingDirectory</key>
     <string>{{DATA_DIR}}</string>

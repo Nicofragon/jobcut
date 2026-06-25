@@ -6,11 +6,14 @@ import {
   exportData,
   getConfig,
   getHealth,
+  getSchedule,
   getScoringBackends,
   putConfig,
   putCredentials,
+  putSchedule,
   validateCredentials,
   type Health,
+  type Schedule,
   type ScoringBackend,
   type Validation,
 } from "@/lib/api";
@@ -122,6 +125,8 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      <Automation />
+
       <Card title="Your data" subtitle="Everything lives on your computer.">
         <p className="text-sm text-on-surface-variant">
           {health ? `${health.jobs} jobs · ${health.applications} applications tracked` : "—"}
@@ -168,6 +173,143 @@ const btnPrimary =
   "rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-on-primary shadow-card transition-colors hover:bg-primary-hover disabled:opacity-50";
 const btnGhost =
   "rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-alt disabled:opacity-50";
+
+function Automation() {
+  const [s, setS] = useState<Schedule | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSchedule().then(setS).catch(() => {});
+  }, []);
+
+  if (!s) {
+    return (
+      <Card title="Automation" subtitle="Run your job search on a schedule.">
+        <p className="text-sm text-on-surface-variant">Loading…</p>
+      </Card>
+    );
+  }
+
+  const time = `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}`;
+  const upd = (patch: Partial<Schedule>) => setS({ ...s, ...patch });
+
+  async function save(next: Schedule) {
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await putSchedule({
+        enabled: next.enabled,
+        frequency: next.frequency,
+        interval_days: next.interval_days,
+        hour: next.hour,
+        minute: next.minute,
+      });
+      setS(res);
+      setNote(res.installed ? "Schedule saved" : "Automation turned off");
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : "Couldn't update the schedule");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!s.supported) {
+    return (
+      <Card title="Automation" subtitle="Run your job search on a schedule.">
+        <p className="text-sm text-on-surface-variant">
+          Installing a schedule from here isn&apos;t supported on {s.platform} yet. On Windows, use Task
+          Scheduler to run <code className="rounded bg-surface-sunken px-1 font-mono text-xs">jobcut daily</code> each
+          morning — see the <code className="font-mono text-xs">scheduler/</code> templates in the repo.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Automation" subtitle="Let jobcut find and score new jobs on a schedule — no clicking.">
+      <label className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={s.enabled}
+          onChange={(e) => {
+            const next = { ...s, enabled: e.target.checked };
+            setS(next);
+            save(next);
+          }}
+          className="h-4 w-4 accent-[var(--color-primary)]"
+        />
+        <span className="text-sm font-medium text-on-surface">Daily automatic job search</span>
+        {s.installed && (
+          <span className="rounded-full bg-primary-tint px-2 py-0.5 text-xs font-semibold text-primary">On</span>
+        )}
+      </label>
+
+      {s.enabled && (
+        <>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Field label="How often">
+              <select
+                value={s.frequency}
+                onChange={(e) => upd({ frequency: e.target.value as Schedule["frequency"] })}
+                className={inputCls}
+              >
+                <option value="daily">Every day</option>
+                <option value="weekdays">Weekdays (Mon–Fri)</option>
+                <option value="every_n">Every N days</option>
+              </select>
+            </Field>
+            {s.frequency === "every_n" && (
+              <Field label="Every how many days">
+                <input
+                  type="number"
+                  min={2}
+                  max={30}
+                  value={s.interval_days}
+                  onChange={(e) => upd({ interval_days: Number(e.target.value) || 2 })}
+                  className={inputCls}
+                />
+              </Field>
+            )}
+            <Field label="Time of day">
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => {
+                  const [h, m] = e.target.value.split(":").map(Number);
+                  upd({ hour: h || 0, minute: m || 0 });
+                }}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button onClick={() => save(s)} disabled={busy} className={btnPrimary}>
+              {busy ? "Saving…" : "Save schedule"}
+            </button>
+            <span className="text-xs text-on-surface-faint">
+              Each run downloads new jobs (~$0.04–0.18 via Apify), scores them, and updates your shortlist.
+            </span>
+          </div>
+        </>
+      )}
+
+      {s.installed && (
+        <p className="mt-3 text-sm text-on-surface-variant">
+          ✓ Scheduled:{" "}
+          {s.frequency === "weekdays"
+            ? "weekdays"
+            : s.frequency === "every_n"
+              ? `every ${s.interval_days} days`
+              : "every day"}{" "}
+          at {time}.
+        </p>
+      )}
+      {note && <p className="mt-2 text-sm text-primary">{note}</p>}
+    </Card>
+  );
+}
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (

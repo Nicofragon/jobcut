@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 import jobcut
 
-from .routers import applications, cv, jobs, market, runs, scoring, searches, settings
+from .routers import applications, cv, jobs, market, runs, schedule, scoring, searches, settings
 
 
 def web_build_dir() -> Path | None:
@@ -39,7 +39,7 @@ def create_app(serve_web: bool = True) -> FastAPI:
     )
     for r in (settings.router, jobs.router, applications.router,
               searches.router, market.router, runs.router, cv.router,
-              scoring.router):
+              scoring.router, schedule.router):
         app.include_router(r, prefix="/api")
 
     # When a static build exists, `jobcut serve` is a single process (no Node).
