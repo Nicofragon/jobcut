@@ -291,16 +291,21 @@ function deriveMetrics(f: Funnel): Metrics {
   const interviewRate = total ? reachedInterview / total : 0;
   const ghostRate = total ? noResponse / total : 0;
 
-  // Weekly activity from by_week (honest ISO week, matching the backend).
-  const series = Object.entries(f.by_week ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  // Weekly activity from by_week (honest ISO week, matching the backend). Show a
+  // fixed window of the last N weeks, filling empty weeks with 0 — so the chart
+  // renders (and reads as a rhythm) even for a brand-new user whose applications
+  // are all in the current week.
+  const WEEKS_SHOWN = 8;
   const now = new Date();
-  const thisKey = isoWeekKey(now);
-  const prevKey = isoWeekKey(new Date(now.getTime() - 7 * 86_400_000));
+  const weekKeys = Array.from({ length: WEEKS_SHOWN }, (_, i) =>
+    isoWeekKey(new Date(now.getTime() - (WEEKS_SHOWN - 1 - i) * 7 * 86_400_000)),
+  );
+  const thisKey = weekKeys[weekKeys.length - 1];
+  const prevKey = weekKeys[weekKeys.length - 2];
   const thisWeek = f.by_week?.[thisKey] ?? 0;
   const weekDelta = thisWeek - (f.by_week?.[prevKey] ?? 0);
-  const last = series.slice(-10);
-  const weekSeries = last.map(([, v]) => v);
-  const weekLabels = last.map(([k]) => (k.includes("-W") ? `W${k.split("-W")[1]}` : k));
+  const weekSeries = weekKeys.map((k) => f.by_week?.[k] ?? 0);
+  const weekLabels = weekKeys.map((k) => (k.includes("-W") ? `W${k.split("-W")[1]}` : k));
 
   return {
     total,
