@@ -15,13 +15,14 @@ market) stays simple.
 from __future__ import annotations
 
 import datetime
+import json
 import sqlite3
 
 import pandas as pd
 
 from . import paths, status
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # jobs columns — mirror pull.flatten() output. job_id is the primary key.
 JOB_COLS = [
@@ -155,6 +156,12 @@ def init_schema(conn: sqlite3.Connection) -> None:
     for col in ("priority", "next_action", "next_action_date", "contact", "cv_version"):
         if col not in app_cols:
             conn.execute(f'ALTER TABLE applications ADD COLUMN "{col}" TEXT')
+
+    # v6: interview-process tracking columns (additive; see ADR-002 + B-2 spec).
+    if "process_stages" not in app_cols:
+        conn.execute('ALTER TABLE applications ADD COLUMN "process_stages" TEXT')
+    if "process_current" not in app_cols:
+        conn.execute('ALTER TABLE applications ADD COLUMN "process_current" INTEGER DEFAULT 0')
 
     row = conn.execute("SELECT value FROM _meta WHERE key='schema_version'").fetchone()
     if row is None:
@@ -404,6 +411,65 @@ def update_application_fields(conn: sqlite3.Connection, job_id: str, fields: dic
     return get_application(conn, job_id)
 
 
+def set_process(conn: sqlite3.Connection, job_id: str, stages: list[str],
+                current: int | None = None, now: str | None = None) -> dict | None:
+    """Set the interview-stage plan for an application. Returns the updated row,
+    or None if the application doesn't exist (caller 404s). Never touches status.
+
+    Blank/whitespace stage names are stripped. An all-blank input is a no-op:
+    the existing row is returned unchanged so an accidental empty write can't
+    silently wipe a stored plan. `current` is clamped to 0..len(stages) relative
+    to the *filtered* list.
+    """
+    jid = str(job_id)
+    if conn.execute("SELECT 1 FROM applications WHERE job_id = ?", (jid,)).fetchone() is None:
+        return None
+    stages = [str(s).strip() for s in stages if str(s).strip()]
+    if not stages:
+        return get_application(conn, jid)
+    cur = 0 if current is None else max(0, min(int(current), len(stages)))
+    now = now or datetime.datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        'UPDATE applications SET process_stages = ?, process_current = ?, updated_at = ? '
+        'WHERE job_id = ?',
+        (json.dumps(stages, ensure_ascii=False), cur, now, jid),
+    )
+    conn.commit()
+    return get_application(conn, jid)
+
+
+def advance_process(conn: sqlite3.Connection, job_id: str, note: str = "",
+                    date: str | None = None, now: str | None = None) -> dict | None:
+    """Mark the current interview stage done: bump process_current (capped) and log
+    one kind='interview' event. Returns {application, event, completed} or None if the
+    application has no process defined. Never touches status."""
+    jid = str(job_id)
+    app = get_application(conn, jid)
+    if app is None or not app.get("process_stages"):
+        return None
+    stages = json.loads(app["process_stages"])
+    if not stages:
+        return None
+    cur = int(app.get("process_current") or 0)
+    ts = date or now or datetime.datetime.now().isoformat(timespec="seconds")
+    event = None
+    if cur < len(stages):
+        stage_name = stages[cur]
+        cur += 1
+        # Stage the increment first WITHOUT committing, then let add_event()'s own
+        # conn.commit() (same connection) flush the UPDATE and the event INSERT together
+        # as one transaction — a crash can't leave process_current and the timeline out of
+        # sync. add_event must stay last; it owns the single commit.
+        conn.execute(
+            'UPDATE applications SET process_current = ?, updated_at = ? WHERE job_id = ?',
+            (cur, ts, jid))
+        event = add_event(conn, jid, "interview", body=note,
+                          meta=json.dumps({"stage": stage_name, "index": cur},
+                                          ensure_ascii=False), now=ts)
+    return {"application": get_application(conn, jid), "event": event,
+            "completed": cur >= len(stages)}
+
+
 def delete_application(conn: sqlite3.Connection, job_id: str) -> int:
     """Delete an application and its timeline (logical cascade). Returns rows removed (0 or 1)."""
     jid = str(job_id)
@@ -476,11 +542,19 @@ def age_stale_applications(conn: sqlite3.Connection, now: str | None = None) -> 
 def stage_durations(conn: sqlite3.Connection, now: str | None = None) -> dict:
     """Per application: how long it's sat in its current stage, and its activity state.
 
-    "Entered current stage" = the ts of its latest `status_change` event; falls back to
-    `applied_at` (then `updated_at`) for rows with no recorded transition (e.g. imported
-    trackers). For an OPEN application (live / Applied / Offer):
-      - `stalled`  = idle STALLED_DAYS..DORMANT_DAYS days (still worth a nudge)
-      - `dormant`  = idle >= DORMANT_DAYS days (probably dead — suggest archiving)
+    Two clocks:
+      - `days_in_stage`/`since` = "entered current stage" = the ts of its latest
+        `status_change` event; falls back to `applied_at` (then `updated_at`) for rows
+        with no recorded transition (e.g. imported trackers). This clock drives the
+        Applied->no_response aging, `by_stage_time`, and the `dormant` flag — only a real
+        status change resets it (a note/interview does NOT advance the stage).
+      - last-activity = the ts of the latest event of ANY tracked kind
+        (status_change/interview/note/next_action). This separate clock drives the
+        `stalled` nudge ONLY (B-3), so an actively-interviewing app with a recent
+        interview round or note isn't falsely flagged stalled.
+    For an OPEN application (live / Applied / Offer):
+      - `stalled`  = no ACTIVITY for STALLED_DAYS+ days, and not already dormant
+      - `dormant`  = in the SAME stage for DORMANT_DAYS+ days (probably dead — archive)
     Returns {job_id: {category, since, days_in_stage, stalled, dormant}}. `now` is
     injectable for deterministic tests.
     """
@@ -488,28 +562,42 @@ def stage_durations(conn: sqlite3.Connection, now: str | None = None) -> dict:
     apps = conn.execute(
         "SELECT job_id, status_category, applied_at, updated_at FROM applications"
     ).fetchall()
-    rows = conn.execute(
+    # "Entered current stage" = latest status_change — drives time-in-stage, the
+    # Applied->no_response aging, by_stage_time, and the dormant flag. Unchanged.
+    change_rows = conn.execute(
         "SELECT job_id, MAX(ts) AS since FROM application_events "
         "WHERE kind = 'status_change' GROUP BY job_id"
     ).fetchall()
-    last_change = {str(r["job_id"]): r["since"] for r in rows}
+    last_change = {str(r["job_id"]): r["since"] for r in change_rows}
+    # "Last activity" = latest event of any tracked kind — drives the stalled nudge ONLY,
+    # so an actively-interviewing app (recent interview/note) isn't flagged stalled (B-3).
+    act_rows = conn.execute(
+        "SELECT job_id, MAX(ts) AS ts FROM application_events "
+        "WHERE kind IN ('status_change','interview','note','next_action') GROUP BY job_id"
+    ).fetchall()
+    last_activity = {str(r["job_id"]): r["ts"] for r in act_rows}
+
+    def _days(ts):
+        if not ts:
+            return None
+        try:
+            return (now_dt - datetime.datetime.fromisoformat(ts)).days
+        except ValueError:
+            return None
+
     out: dict[str, dict] = {}
     for a in apps:
         jid = str(a["job_id"])
         since = last_change.get(jid) or a["applied_at"] or a["updated_at"]
-        days = None
-        if since:
-            try:
-                days = (now_dt - datetime.datetime.fromisoformat(since)).days
-            except ValueError:
-                days = None
+        days = _days(since)
+        activity_days = _days(last_activity.get(jid) or since)
         category = a["status_category"]
         is_open = category in status.OPEN and days is not None
-        # Only "stallable" stages (live / offer) count as needing a nudge — Applied is
-        # handled by no-response aging, not by the stalled flag.
-        stalled = bool(days is not None and category in status.STALLABLE
-                       and STALLED_DAYS <= days < DORMANT_DAYS)
+        # dormant = probably dead: in the SAME stage for DORMANT_DAYS+ (entered-stage clock).
         dormant = bool(is_open and days >= DORMANT_DAYS)
+        # stalled = needs a nudge: no ACTIVITY for STALLED_DAYS+, and not already dormant.
+        stalled = bool(not dormant and activity_days is not None
+                       and category in status.STALLABLE and activity_days >= STALLED_DAYS)
         out[jid] = {"category": category, "since": since, "days_in_stage": days,
                     "stalled": stalled, "dormant": dormant}
     return out
@@ -566,3 +654,23 @@ def application_funnel(conn: sqlite3.Connection, now: str | None = None) -> dict
             acc.setdefault(d["category"], []).append(d["days_in_stage"])
     result["by_stage_time"] = {k: round(sum(v) / len(v), 1) for k, v in acc.items()}
     return result
+
+
+def interview_funnel(conn: sqlite3.Connection) -> list[dict]:
+    """Stage-conversion funnel by interview index. reached[N] = #apps whose
+    process_current >= N; conversion[N] = reached[N+1]/reached[N]. Apps with
+    process_current = 0 (no process) are excluded."""
+    currents = [int(r["process_current"] or 0)
+                for r in conn.execute(
+                    "SELECT process_current FROM applications "
+                    "WHERE process_current IS NOT NULL AND process_current > 0").fetchall()]
+    if not currents:
+        return []
+    top = max(currents)
+    reached = [sum(1 for c in currents if c >= n) for n in range(1, top + 1)]
+    out = []
+    for i, n in enumerate(range(1, top + 1)):
+        nxt = reached[i + 1] if i + 1 < len(reached) else None
+        conv = (nxt / reached[i]) if (nxt is not None and reached[i]) else None
+        out.append({"stage": n, "reached": reached[i], "conversion": conv})
+    return out

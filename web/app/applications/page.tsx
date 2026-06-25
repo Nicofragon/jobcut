@@ -7,8 +7,10 @@ import {
   deleteApplication,
   getApplications,
   getFunnel,
+  getInterviewFunnel,
   type Application,
   type Funnel,
+  type InterviewFunnelRow,
 } from "@/lib/api";
 import { CATEGORY_COLOR } from "@/lib/ui";
 import { Icon } from "@/components/icons";
@@ -21,16 +23,18 @@ type Row = Application;
 export default function ApplicationsPage() {
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
+  const [ivFunnel, setIvFunnel] = useState<InterviewFunnelRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     // One call each — the list endpoint already carries title/company (server-side
     // join), so no per-row job fetch (that N+1 cost ~6.75s for 62 rows).
-    Promise.all([getFunnel(), getApplications()])
-      .then(([f, apps]) => {
+    Promise.all([getFunnel(), getApplications(), getInterviewFunnel()])
+      .then(([f, apps, iv]) => {
         setFunnel(f);
         setRows(apps);
+        setIvFunnel(iv);
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "failed to load"))
@@ -77,6 +81,7 @@ export default function ApplicationsPage() {
           <KpiRow m={m} />
           <ActivityTrend labels={m.weekLabels} values={m.weekSeries} />
           <FunnelPanel m={m} stalled={funnel.stalled_count ?? 0} dormant={funnel.dormant_count ?? 0} />
+          <InterviewFunnelPanel rows={ivFunnel} />
         </>
       )}
 
@@ -587,6 +592,32 @@ function FunnelPanel({ m, stalled, dormant }: { m: Metrics; stalled: number; dor
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+// ---- Interview funnel (by interview stage index) ----------------------------
+
+function InterviewFunnelPanel({ rows }: { rows: InterviewFunnelRow[] }) {
+  if (rows.length === 0) return null;
+  const max = rows[0]?.reached || 1;
+  return (
+    <section className="mt-8 rounded-card border border-border/40 bg-surface p-6">
+      <h3 className="text-sm font-semibold">Interview funnel</h3>
+      <p className="text-xs text-on-surface-variant">Where your processes convert, by interview stage.</p>
+      <div className="mt-4 space-y-2">
+        {rows.map((row) => (
+          <div key={row.stage} className="flex items-center gap-3 text-sm">
+            <span className="w-10 text-on-surface-variant">{row.stage}ª</span>
+            <div className="h-5 flex-1 rounded bg-surface-sunken">
+              <div className="h-5 rounded bg-primary" style={{ width: `${(row.reached / max) * 100}%` }} />
+            </div>
+            <span className="w-24 text-right text-on-surface-variant">
+              {row.reached}{row.conversion != null ? ` · ${Math.round(row.conversion * 100)}% →` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

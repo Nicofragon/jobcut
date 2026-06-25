@@ -5,10 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   addEvent,
+  advanceProcess,
   getEvents,
   getJob,
   patchApplication,
+  setProcess,
   setStatus,
+  suggestProcess,
   type ApplicationFields,
   type AppEvent,
   type JobDetail,
@@ -66,6 +69,16 @@ function fmtWhen(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function parseStages(s: string | null | undefined): string[] {
+  if (!s) return [];
+  try {
+    const a = JSON.parse(s);
+    return Array.isArray(a) ? a.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -161,6 +174,34 @@ function JobDetailView() {
 
   async function patchField(key: keyof ApplicationFields, value: string) {
     await patchApplication(id, { [key]: value }); // structured fields; never touches status
+  }
+
+  async function onAdvance() {
+    const r = await advanceProcess(id);
+    load();
+    if (r.completed) {
+      if (confirm("Process complete — mark this application as Offer?")) {
+        await setStatus(id, "offer");
+        load();
+      }
+    }
+  }
+
+  async function onEditProcess() {
+    const current = parseStages(data?.application?.process_stages).join("\n");
+    const text = prompt("One stage per line:", current);
+    if (text == null) return;
+    const stages = text.split("\n").map((s) => s.trim()).filter(Boolean);
+    await setProcess(id, stages);
+    load();
+  }
+
+  async function onSuggestProcess() {
+    const { stages } = await suggestProcess(id);
+    const text = prompt("Suggested stages (edit, one per line):", stages.join("\n"));
+    if (text == null) return;
+    await setProcess(id, text.split("\n").map((s) => s.trim()).filter(Boolean));
+    load();
   }
 
   return (
@@ -315,6 +356,53 @@ function JobDetailView() {
               )}
             </div>
           </Panel>
+
+          {data.application && (() => {
+            const stages = parseStages(data.application.process_stages);
+            const cur = data.application.process_current ?? 0;
+            if (stages.length === 0) {
+              return (
+                <div className="rounded-card border border-border/40 bg-surface p-6 shadow-card">
+                  <h2 className="mb-4 text-xl font-semibold text-on-surface">Interview process</h2>
+                  <p className="text-sm text-on-surface-variant">No process defined yet.</p>
+                  <div className="mt-3 flex gap-2">
+                    <button onClick={onEditProcess} className="rounded-lg border border-border px-3 py-1.5 text-sm">Define stages</button>
+                    <button onClick={onSuggestProcess} className="rounded-lg border border-border px-3 py-1.5 text-sm">Suggest from posting</button>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="rounded-card border border-border/40 bg-surface p-6 shadow-card">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-on-surface">Interview process</h2>
+                  <span className="text-xs text-on-surface-variant">
+                    Stage {Math.min(cur + (cur < stages.length ? 1 : 0), stages.length)} of {stages.length}
+                  </span>
+                </div>
+                <ol className="mt-3 space-y-1.5">
+                  {stages.map((name, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm">
+                      <span>{i < cur ? "✅" : i === cur ? "◉" : "○"}</span>
+                      <span className={i === cur ? "font-medium" : "text-on-surface-variant"}>{name}</span>
+                    </li>
+                  ))}
+                </ol>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={onAdvance}
+                    disabled={cur >= stages.length}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-sm text-on-primary disabled:opacity-50"
+                  >
+                    Advance stage
+                  </button>
+                  <button onClick={onEditProcess} className="rounded-lg border border-border px-3 py-1.5 text-sm">
+                    Edit stages
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           <Panel title="Notes & activity">
             <div className="space-y-3">

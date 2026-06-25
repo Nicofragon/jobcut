@@ -7,7 +7,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ... import db, status as status_mod
+from ... import db, process, status as status_mod
 from ..deps import get_conn
 
 router = APIRouter(prefix="/applications", tags=["applications"])
@@ -31,6 +31,16 @@ class FieldsIn(BaseModel):
     next_action_date: str | None = None
     contact: str | None = None
     cv_version: str | None = None
+
+
+class ProcessIn(BaseModel):
+    stages: list[str]
+    current: int | None = None
+
+
+class AdvanceIn(BaseModel):
+    note: str = ""
+    date: str | None = None
 
 
 # Caller-writable event kinds (status_change is internal — written by set_status only).
@@ -67,6 +77,11 @@ def funnel(conn: sqlite3.Connection = Depends(get_conn)):
 def statuses():
     """The canonical status vocabulary the dashboard writes."""
     return {"statuses": status_mod.STATUSES, "categories": status_mod.CATEGORIES}
+
+
+@router.get("/interview-funnel")
+def interview_funnel(conn: sqlite3.Connection = Depends(get_conn)):
+    return db.interview_funnel(conn)
 
 
 @router.get("/{job_id}")
@@ -115,3 +130,28 @@ def post_event(job_id: str, body: EventIn, conn: sqlite3.Connection = Depends(ge
     if body.kind not in EVENT_KINDS:
         raise HTTPException(status_code=422, detail=f"kind must be one of {sorted(EVENT_KINDS)}")
     return db.add_event(conn, job_id, body.kind, body=body.body, meta=body.meta)
+
+
+@router.put("/{job_id}/process")
+def set_process(job_id: str, body: ProcessIn, conn: sqlite3.Connection = Depends(get_conn)):
+    updated = db.set_process(conn, job_id, body.stages, current=body.current)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="application not found")
+    return updated
+
+
+@router.post("/{job_id}/process/suggest")
+def suggest_process(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
+    job = db.get_job_row(conn, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    stages, source = process.extract_process(job["description"] or "")
+    return {"stages": stages, "source": source}
+
+
+@router.post("/{job_id}/process/advance")
+def advance_process(job_id: str, body: AdvanceIn, conn: sqlite3.Connection = Depends(get_conn)):
+    result = db.advance_process(conn, job_id, note=body.note, date=body.date)
+    if result is None:
+        raise HTTPException(status_code=404, detail="application or process not found")
+    return result

@@ -55,6 +55,9 @@ export type Application = {
   days_in_stage?: number | null;
   stalled?: boolean; // open & idle 14..90d (needs a nudge)
   dormant?: boolean; // open & idle >= 90d (probably dead)
+  // Phase 4: interview process tracking
+  process_stages?: string | null;
+  process_current?: number | null;
 };
 
 export type ApplicationFields = Partial<
@@ -347,3 +350,28 @@ export const startRun = (kind: RunKind, mode = "read", confirm = false) =>
   });
 
 export const runEventsUrl = (runId: string) => `${apiBase()}/runs/${runId}/events`;
+
+// --- interview process --------------------------------------------------
+
+export type InterviewFunnelRow = { stage: number; reached: number; conversion: number | null };
+export type ProcessAdvance = { application: Application; event: AppEvent | null; completed: boolean };
+
+export const setProcess = (jobId: string, stages: string[], current?: number) =>
+  api<Application>(`/applications/${jobId}/process`, {
+    method: "PUT",
+    body: JSON.stringify({ stages, current }),
+  });
+
+export const advanceProcess = (jobId: string, note?: string) =>
+  api<ProcessAdvance>(`/applications/${jobId}/process/advance`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? "" }),
+  });
+
+export const suggestProcess = (jobId: string) =>
+  api<{ stages: string[]; source: string }>(`/applications/${jobId}/process/suggest`, {
+    method: "POST",
+  });
+
+export const getInterviewFunnel = () =>
+  api<InterviewFunnelRow[]>("/applications/interview-funnel");
