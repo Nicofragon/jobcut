@@ -50,6 +50,11 @@ just as direct.
    operation**, keyed by `job_id`:
 
    - **Add a note** → `{"job_id": "...", "kind": "note", "body": "Recruiter call went well"}`
+     The `body` is **only the new note** — the one thing the user just told you. The
+     timeline is append-only and already keeps every prior note, so **never** read the
+     existing notes/summary and paste them into the new `body` to "preserve history":
+     that duplicates the whole block on the timeline. One note in, one note on the
+     timeline. (Notes do not overwrite any summary field; there is nothing to preserve.)
    - **Log an interview round** → `{"job_id": "...", "kind": "interview",
      "body": "Technical with Diego", "meta": {"stage": "Technical", "index": 2},
      "date": "2026-06-15"}` (use `date` for when the round actually happened; `YYYY-MM-DD`).
@@ -92,6 +97,11 @@ just as direct.
 - **Events are append-only** — re-running adds another note/round. Don't re-ingest the
   same events "just in case". `status` and `fields` are idempotent (they overwrite), so
   those are safe to repeat.
+- **A note's `body` is just the new note, never the accumulated history.** The timeline
+  shows each note as its own entry; the console "Notes & activity" panel reads that same
+  timeline. So writing only the new text is exactly what the user sees — concatenating the
+  prior summary into each note just repeats the whole block. To *correct* an earlier note,
+  add a new short note saying what changed; the old one stays as the record.
 - Use the `date` field for an interview round that happened in the past (e.g. importing
   from memory) so the timeline and process-timing reflect the real dates; omit it to
   stamp "now".

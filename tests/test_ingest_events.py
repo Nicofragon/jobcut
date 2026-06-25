@@ -33,9 +33,10 @@ def _write_events(tmp_path, events, name="events.json"):
 
 # --- db-level: ingest.ingest_events -----------------------------------------
 
-def test_note_appends_event_and_mirrors_notes(conn, tmp_path):
+def test_note_appends_to_timeline_without_touching_notes_field(conn, tmp_path):
     jid = _seed_job(conn)
-    db.set_application_status(conn, jid, "applied")
+    # A status-change note lives in applications.notes; a timeline note must NOT clobber it.
+    db.set_application_status(conn, jid, "applied", notes="referred by Ana")
     path = _write_events(tmp_path, [{"job_id": jid, "kind": "note", "body": "called recruiter"}])
 
     summary = ingest.ingest_events(path, conn)
@@ -46,8 +47,9 @@ def test_note_appends_event_and_mirrors_notes(conn, tmp_path):
     notes = [e for e in events if e["kind"] == "note"]
     assert len(notes) == 1
     assert notes[0]["body"] == "called recruiter"
-    # applications.notes mirror is kept in sync
-    assert db.get_application(conn, jid)["notes"] == "called recruiter"
+    # The note is history in the timeline only — the status note is left untouched
+    # (no mirror, so callers never need to re-paste the prior summary into a new note).
+    assert db.get_application(conn, jid)["notes"] == "referred by Ana"
 
 
 def test_interview_carries_meta_and_normalized_ts(conn, tmp_path):

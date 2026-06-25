@@ -500,12 +500,11 @@ def add_event(conn: sqlite3.Connection, job_id: str, kind: str, body: str = "",
         'VALUES (?,?,?,?,?,?,?)',
         (str(job_id), ts, kind, from_status, to_status, body or "", meta or ""),
     )
-    # Keep the applications.notes mirror (last note) in sync when a row exists.
-    if kind == "note":
-        conn.execute(
-            "UPDATE applications SET notes = ?, updated_at = ? WHERE job_id = ?",
-            (body or "", ts, str(job_id)),
-        )
+    # Notes live ONLY in the timeline (append-only). We deliberately do NOT mirror a
+    # note's body back into applications.notes: that field is the status-change note
+    # (set via set_application_status), and clobbering it on every note led callers to
+    # re-paste the whole prior summary into each new note "to avoid losing it" — which
+    # duplicated the timeline. The timeline is the history; there is nothing to mirror.
     conn.commit()
     row = conn.execute("SELECT * FROM application_events WHERE event_id = ?", (cur.lastrowid,)).fetchone()
     return dict(row)
