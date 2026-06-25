@@ -149,7 +149,9 @@ function JobDetailView() {
 
   const load = useCallback(() => {
     if (!id) return;
-    Promise.all([getJob(id), getEvents(id), getProcessTiming(id)])
+    // Timing is supplementary — never let it block the page (a job with no application
+    // returns null; any other hiccup degrades to "no timing" rather than an error screen).
+    Promise.all([getJob(id), getEvents(id), getProcessTiming(id).catch(() => null)])
       .then(([d, ev, t]) => {
         setData(d);
         setLocalStatus(d.application?.status ?? null);

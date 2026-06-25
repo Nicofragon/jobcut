@@ -191,6 +191,7 @@ def advance_process(job_id: str, body: AdvanceIn, conn: sqlite3.Connection = Dep
 
 @router.get("/{job_id}/process/timing")
 def process_timing(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
-    if db.get_application(conn, job_id) is None:
-        raise HTTPException(status_code=404, detail="application not found")
+    # Returns the timing dict, or null when the job has no application / fewer than two
+    # rounds. NOT a 404 for "no application": the job detail page opens this for shortlist
+    # roles you haven't applied to yet, and a 404 there would break the whole page.
     return db.process_timing(conn, job_id)  # dict or null
