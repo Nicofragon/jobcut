@@ -8,6 +8,7 @@ import {
   advanceProcess,
   getEvents,
   getJob,
+  getProcessTiming,
   patchApplication,
   setProcess,
   setStatus,
@@ -15,6 +16,7 @@ import {
   type ApplicationFields,
   type AppEvent,
   type JobDetail,
+  type ProcessTiming,
 } from "@/lib/api";
 import ScoreRing from "@/components/ScoreRing";
 import StatusSelect from "@/components/StatusSelect";
@@ -126,14 +128,17 @@ function JobDetailView() {
   const [processBusy, setProcessBusy] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
+  const [advanceDate, setAdvanceDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [timing, setTiming] = useState<ProcessTiming>(null);
 
   const load = useCallback(() => {
     if (!id) return;
-    Promise.all([getJob(id), getEvents(id)])
-      .then(([d, ev]) => {
+    Promise.all([getJob(id), getEvents(id), getProcessTiming(id)])
+      .then(([d, ev, t]) => {
         setData(d);
         setLocalStatus(d.application?.status ?? null);
         setEvents(ev);
+        setTiming(t);
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "failed to load"));
@@ -183,7 +188,7 @@ function JobDetailView() {
   }
 
   async function onAdvance() {
-    const r = await advanceProcess(id);
+    const r = await advanceProcess(id, undefined, advanceDate);
     load();
     if (r.completed) {
       setJustCompleted(true);
@@ -455,7 +460,7 @@ function JobDetailView() {
                         </li>
                       ))}
                     </ol>
-                    <div className="mt-3 flex gap-2">
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
                       <button
                         onClick={onAdvance}
                         disabled={cur >= stages.length}
@@ -463,6 +468,13 @@ function JobDetailView() {
                       >
                         Advance stage
                       </button>
+                      <input
+                        type="date"
+                        value={advanceDate}
+                        onChange={(e) => setAdvanceDate(e.target.value)}
+                        className="rounded-lg border border-border bg-bg px-2 py-1.5 text-sm text-on-surface"
+                        aria-label="Round date"
+                      />
                       <button
                         onClick={onEditProcess}
                         className="rounded-lg border border-border px-3 py-1.5 text-sm"
@@ -477,6 +489,11 @@ function JobDetailView() {
                         {processBusy ? "Suggesting…" : "Suggest from posting"}
                       </button>
                     </div>
+                    {timing && (
+                      <p className="mt-2 text-xs text-on-surface-variant">
+                        Process: {timing.duration_days} days · avg gap {Math.round(timing.avg_gap_days)} days
+                      </p>
+                    )}
                     {suggestError && (
                       <p className="mt-2 text-sm text-red-500">{suggestError}</p>
                     )}

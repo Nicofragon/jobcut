@@ -1,3 +1,4 @@
+import datetime
 import json
 
 import pytest
@@ -144,6 +145,76 @@ def test_interview_funnel_counts_reached_and_conversion(conn):
     assert by_stage[3]["reached"] == 1
     assert round(by_stage[2]["conversion"], 2) == 0.33  # 1/3
     assert by_stage[3]["conversion"] is None
+
+
+def test_process_timing_three_rounds(conn):
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    db.set_process(conn, "1", ["R1", "R2", "R3"], current=0)
+    for d in ("2026-06-01", "2026-06-08", "2026-06-15"):
+        db.add_event(conn, "1", "interview", now=d)
+    t = db.process_timing(conn, "1")
+    assert t["rounds"] == 3
+    assert t["first"] == "2026-06-01" and t["last"] == "2026-06-15"
+    assert t["duration_days"] == 14
+    assert t["gaps_days"] == [7, 7]
+    assert t["avg_gap_days"] == 7.0
+
+
+def test_process_timing_none_with_one_round(conn):
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    db.add_event(conn, "1", "interview", now="2026-06-01")
+    assert db.process_timing(conn, "1") is None
+
+
+def test_process_timing_mixes_date_only_and_full_iso(conn):
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    # date-only + full-ISO ts must parse to the same day granularity
+    db.add_event(conn, "1", "interview", now="2026-06-01")
+    db.add_event(conn, "1", "interview", now="2026-06-08T12:00:00")
+    db.add_event(conn, "1", "interview", now="2026-06-15T09:30:45")
+    t = db.process_timing(conn, "1")
+    assert t["rounds"] == 3
+    assert t["duration_days"] == 14
+    assert t["gaps_days"] == [7, 7]
+    assert t["avg_gap_days"] == 7.0
+
+
+def test_process_timing_summary_counts_only_multi_round_apps(conn):
+    # app "1": 3 rounds → 14 days, avg gap 7
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    for d in ("2026-06-01", "2026-06-08", "2026-06-15"):
+        db.add_event(conn, "1", "interview", now=d)
+    # app "2": 2 rounds → 4 days, avg gap 4
+    db.set_application_status(conn, "2", "interview", now="2026-06-01T00:00:00")
+    for d in ("2026-06-01", "2026-06-05"):
+        db.add_event(conn, "2", "interview", now=d)
+    # app "3": 1 round → excluded
+    db.set_application_status(conn, "3", "interview", now="2026-06-01T00:00:00")
+    db.add_event(conn, "3", "interview", now="2026-06-01")
+    s = db.process_timing_summary(conn)
+    assert s["processes"] == 2
+    assert s["avg_duration_days"] == (14 + 4) / 2  # 9.0
+    assert s["avg_gap_days"] == (7.0 + 4.0) / 2    # 5.5
+
+
+def test_process_timing_summary_empty(conn):
+    assert db.process_timing_summary(conn) == {
+        "processes": 0, "avg_duration_days": None, "avg_gap_days": None}
+
+
+def test_advance_process_normalizes_date_only(conn):
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    db.set_process(conn, "1", ["R1", "R2"], current=0)
+    r = db.advance_process(conn, "1", date="2026-06-08")
+    assert r["event"]["ts"] == "2026-06-08T12:00:00"
+
+
+def test_advance_process_without_date_uses_today(conn):
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    db.set_process(conn, "1", ["R1", "R2"], current=0)
+    r = db.advance_process(conn, "1")
+    today = datetime.date.today().isoformat()
+    assert r["event"]["ts"].startswith(today)
 
 
 def test_recent_interview_event_clears_stalled(conn):

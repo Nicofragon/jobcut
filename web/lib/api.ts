@@ -355,6 +355,19 @@ export const runEventsUrl = (runId: string) => `${apiBase()}/runs/${runId}/event
 
 export type InterviewFunnelRow = { stage: number; reached: number; conversion: number | null };
 export type ProcessAdvance = { application: Application; event: AppEvent | null; completed: boolean };
+export type ProcessTiming = {
+  rounds: number;
+  first: string;
+  last: string;
+  duration_days: number;
+  gaps_days: number[];
+  avg_gap_days: number;
+} | null;
+export type ProcessTimingSummary = {
+  processes: number;
+  avg_duration_days: number | null;
+  avg_gap_days: number | null;
+};
 
 export const setProcess = (jobId: string, stages: string[], current?: number) =>
   api<Application>(`/applications/${jobId}/process`, {
@@ -362,10 +375,10 @@ export const setProcess = (jobId: string, stages: string[], current?: number) =>
     body: JSON.stringify({ stages, current }),
   });
 
-export const advanceProcess = (jobId: string, note?: string) =>
+export const advanceProcess = (jobId: string, note?: string, date?: string) =>
   api<ProcessAdvance>(`/applications/${jobId}/process/advance`, {
     method: "POST",
-    body: JSON.stringify({ note: note ?? "" }),
+    body: JSON.stringify({ note: note ?? "", ...(date ? { date } : {}) }),
   });
 
 export const suggestProcess = (jobId: string) =>
@@ -375,3 +388,9 @@ export const suggestProcess = (jobId: string) =>
 
 export const getInterviewFunnel = () =>
   api<InterviewFunnelRow[]>("/applications/interview-funnel");
+
+export const getProcessTiming = (jobId: string) =>
+  api<ProcessTiming>(`/applications/${jobId}/process/timing`);
+
+export const getProcessTimingSummary = () =>
+  api<ProcessTimingSummary>("/applications/process-timing");

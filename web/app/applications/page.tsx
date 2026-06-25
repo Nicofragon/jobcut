@@ -8,9 +8,11 @@ import {
   getApplications,
   getFunnel,
   getInterviewFunnel,
+  getProcessTimingSummary,
   type Application,
   type Funnel,
   type InterviewFunnelRow,
+  type ProcessTimingSummary,
 } from "@/lib/api";
 import { CATEGORY_COLOR } from "@/lib/ui";
 import { Icon } from "@/components/icons";
@@ -24,17 +26,19 @@ export default function ApplicationsPage() {
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [ivFunnel, setIvFunnel] = useState<InterviewFunnelRow[]>([]);
+  const [timing, setTiming] = useState<ProcessTimingSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     // One call each — the list endpoint already carries title/company (server-side
     // join), so no per-row job fetch (that N+1 cost ~6.75s for 62 rows).
-    Promise.all([getFunnel(), getApplications(), getInterviewFunnel()])
-      .then(([f, apps, iv]) => {
+    Promise.all([getFunnel(), getApplications(), getInterviewFunnel(), getProcessTimingSummary()])
+      .then(([f, apps, iv, t]) => {
         setFunnel(f);
         setRows(apps);
         setIvFunnel(iv);
+        setTiming(t);
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "failed to load"))
@@ -82,6 +86,12 @@ export default function ApplicationsPage() {
           <ActivityTrend labels={m.weekLabels} values={m.weekSeries} />
           <FunnelPanel m={m} stalled={funnel.stalled_count ?? 0} dormant={funnel.dormant_count ?? 0} />
           <InterviewFunnelPanel rows={ivFunnel} />
+          {timing && timing.processes > 0 && (
+            <p className="mt-2 text-xs text-on-surface-variant">
+              Avg process {Math.round(timing.avg_duration_days!)} days · avg gap{" "}
+              {Math.round(timing.avg_gap_days!)} days · {timing.processes} processes
+            </p>
+          )}
         </>
       )}
 

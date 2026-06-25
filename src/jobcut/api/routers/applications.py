@@ -84,6 +84,11 @@ def interview_funnel(conn: sqlite3.Connection = Depends(get_conn)):
     return db.interview_funnel(conn)
 
 
+@router.get("/process-timing")
+def process_timing_agg(conn: sqlite3.Connection = Depends(get_conn)):
+    return db.process_timing_summary(conn)
+
+
 @router.get("/{job_id}")
 def get_one(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
     app = db.get_application(conn, job_id)
@@ -155,3 +160,10 @@ def advance_process(job_id: str, body: AdvanceIn, conn: sqlite3.Connection = Dep
     if result is None:
         raise HTTPException(status_code=404, detail="application or process not found")
     return result
+
+
+@router.get("/{job_id}/process/timing")
+def process_timing(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
+    if db.get_application(conn, job_id) is None:
+        raise HTTPException(status_code=404, detail="application not found")
+    return db.process_timing(conn, job_id)  # dict or null
