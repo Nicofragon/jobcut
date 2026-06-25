@@ -324,7 +324,7 @@ function EmptyState() {
 
 // ---- derived metrics (all client-side from what /funnel already returns) -----
 
-type Stage = { key: string; label: string; count: number; color: string };
+type Stage = { key: string; label: string; count: number; active: number; color: string };
 
 type Metrics = {
   total: number;
@@ -358,16 +358,19 @@ function deriveMetrics(f: Funnel): Metrics {
   const withdrawn = g("Withdrawn");
   const total = f.total;
 
-  // Cumulative funnel: with a single current-state field, "reached at least
-  // stage X" = everyone currently at X or beyond. Everyone applied (the top).
-  const reachedScreen = screening + interview + offer;
-  const reachedInterview = interview + offer;
+  // Cumulative funnel = how many EVER reached each stage, from the event history (B-12):
+  // a role rejected after an interview still counts. Falls back to the current-state
+  // approximation ("everyone at X or beyond") when the backend doesn't send `reached`.
+  const reachedApplied = f.reached?.applied ?? total;
+  const reachedScreen = f.reached?.screen ?? screening + interview + offer;
+  const reachedInterview = f.reached?.interview ?? interview + offer;
+  const reachedOffer = f.reached?.offer ?? offer;
 
   const stages: Stage[] = [
-    { key: "applied", label: "Applied", count: total, color: CATEGORY_COLOR.Applied },
-    { key: "screening", label: "Screening", count: reachedScreen, color: CATEGORY_COLOR.Screen },
-    { key: "interview", label: "Interview", count: reachedInterview, color: CATEGORY_COLOR.Interview },
-    { key: "offer", label: "Offer", count: offer, color: CATEGORY_COLOR.Offer },
+    { key: "applied", label: "Applied", count: reachedApplied, active: pending, color: CATEGORY_COLOR.Applied },
+    { key: "screening", label: "Screening", count: reachedScreen, active: screening, color: CATEGORY_COLOR.Screen },
+    { key: "interview", label: "Interview", count: reachedInterview, active: interview, color: CATEGORY_COLOR.Interview },
+    { key: "offer", label: "Offer", count: reachedOffer, active: offer, color: CATEGORY_COLOR.Offer },
   ];
 
   const leaks = [
@@ -392,8 +395,10 @@ function deriveMetrics(f: Funnel): Metrics {
     }
   }
 
-  // Any signal back from the other side (advanced past applied, or got a reject).
-  const responses = reachedScreen + rejected;
+  // Any signal back from the other side = everyone who isn't still-waiting (Applied) or
+  // ghosted (No response). Defined this way (not reachedScreen + rejected) so it can't
+  // double-count a role that reached screening and was then rejected (B-12 cumulative).
+  const responses = Math.max(0, total - pending - noResponse);
   const responseRate = total ? responses / total : 0;
   const interviewRate = total ? reachedInterview / total : 0;
   const ghostRate = total ? noResponse / total : 0;
@@ -603,7 +608,7 @@ function FunnelPanel({ m, stalled, dormant }: { m: Metrics; stalled: number; dor
       <div className="mb-4 flex items-baseline justify-between gap-4">
         <h2 className="flex items-baseline gap-2 text-lg font-semibold text-on-surface">
           Pipeline
-          <InfoDot text="Your applications by how far they got. Each step is cumulative: 'reached at least this stage'. The goal is interviews — offers are rare and end the search." />
+          <InfoDot text="Your applications by how far they got — counted across your whole history, so a role you interviewed for and were then rejected still counts toward 'reached interview'. The faint 'N active' is how many are in that stage right now. The goal is interviews — offers are rare and end the search." />
           {stalled > 0 && (
             <span className="ml-1 text-sm font-medium" style={{ color: CATEGORY_COLOR.Withdrawn }}>
               {stalled} stalled
@@ -652,7 +657,12 @@ function FunnelPanel({ m, stalled, dormant }: { m: Metrics; stalled: number; dor
                   aria-label={`${s.label}: ${s.count}`}
                 />
               </div>
-              <div className="flex w-28 shrink-0 items-baseline justify-end gap-2">
+              <div className="flex w-36 shrink-0 items-baseline justify-end gap-2">
+                {s.active > 0 && s.key !== "applied" && (
+                  <span className="text-xs tabular-nums text-on-surface-faint" title="active in this stage now">
+                    {s.active} active
+                  </span>
+                )}
                 <span className="text-sm font-semibold tabular-nums text-on-surface">{s.count}</span>
                 <span className="w-10 text-right text-xs tabular-nums text-on-surface-faint">
                   {pct(ofApplied)}
