@@ -761,7 +761,16 @@ function bucketColor(key: string): string {
   return (b && CATEGORY_COLOR[b.cats[0]]) || "#64748b";
 }
 
-type SortKey = "updated" | "company";
+type SortKey = "active" | "updated" | "company";
+
+// B-10: rank by how "in play" a role is, so what's actually moving floats to the top.
+// 0 = in process (interviewing / with movement), 1 = sent or saved, 2 = terminal.
+const ACTIVE_RANK: Record<string, number> = {
+  Interview: 0, Screen: 0, Active: 0, Reviewing: 0, Offer: 0,
+  Applied: 1, Saved: 1,
+  "No response": 2, Closed: 2, Rejected: 2, Withdrawn: 2, Other: 2,
+};
+const activeRank = (cat: string) => ACTIVE_RANK[cat] ?? 1;
 
 function TrackerList({
   rows,
@@ -773,7 +782,7 @@ function TrackerList({
   onChanged: () => void;
 }) {
   const [filter, setFilter] = useState("all");
-  const [sort, setSort] = useState<SortKey>("updated");
+  const [sort, setSort] = useState<SortKey>("active");
 
   const counts = new Map<string, number>();
   for (const r of rows) {
@@ -783,10 +792,14 @@ function TrackerList({
   const presentBuckets = BUCKETS.filter((b) => counts.has(b.key));
 
   const visible = rows.filter((r) => filter === "all" || bucketOf(r.status_category) === filter);
-  const sorter = (a: Row, b: Row) =>
-    sort === "company"
-      ? (a.company_name ?? "").localeCompare(b.company_name ?? "")
-      : (b.updated_at ?? "").localeCompare(a.updated_at ?? ""); // recent first
+  const byRecent = (a: Row, b: Row) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
+  const sorter = (a: Row, b: Row) => {
+    if (sort === "company") return (a.company_name ?? "").localeCompare(b.company_name ?? "");
+    if (sort === "updated") return byRecent(a, b);
+    // "active": in-process first, then most-recently-updated within each tier.
+    const dr = activeRank(a.status_category) - activeRank(b.status_category);
+    return dr !== 0 ? dr : byRecent(a, b);
+  };
 
   // One flat row per application (B-6) — they're all already-applied roles, so grouping by
   // category just fragments the list. The status pill on each row shows its current stage;
@@ -806,6 +819,7 @@ function TrackerList({
             onChange={(e) => setSort(e.target.value as SortKey)}
             className="rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm font-medium text-on-surface outline-none focus:border-primary"
           >
+            <option value="active">Active first</option>
             <option value="updated">Recently updated</option>
             <option value="company">Company A–Z</option>
           </select>
