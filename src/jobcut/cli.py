@@ -262,12 +262,35 @@ def cmd_age_applications(args) -> int:
     return 0
 
 
-def _maybe_build_web(no_build: bool) -> None:
-    """Build the Next.js console automatically on first run, when Node is available.
+def _web_is_stale(web, out) -> bool:
+    """True if any web source file is newer than the built console (e.g. after a git pull)."""
+    try:
+        index = out / "index.html"
+        built_at = index.stat().st_mtime if index.exists() else 0.0
+        newest = 0.0
+        # Only walk source dirs (never node_modules/out) so this stays fast.
+        for sub in ("app", "components", "lib", "public"):
+            d = web / sub
+            if d.is_dir():
+                for f in d.rglob("*"):
+                    if f.is_file():
+                        newest = max(newest, f.stat().st_mtime)
+        for name in ("package.json", "next.config.ts", "tailwind.config.ts", "tsconfig.json", "globals.css"):
+            p = web / name
+            if p.exists():
+                newest = max(newest, p.stat().st_mtime)
+        return newest > built_at
+    except OSError:
+        return False
 
-    Keeps `jobcut serve` a one-command experience: the user never has to remember
-    `npm install && npm run build`. Resilient — if Node is missing or the build
-    fails, we just fall back to serving the API only.
+
+def _maybe_build_web(no_build: bool) -> None:
+    """Build the Next.js console automatically when it's missing OR out of date.
+
+    Keeps `jobcut serve` a one-command experience: the user never runs
+    `npm install && npm run build`, and a `git pull` that changes the web source
+    is picked up automatically (the built `web/out` is rebuilt when stale).
+    Resilient — if Node is missing or the build fails, we serve the API only.
     """
     import shutil
     import subprocess
@@ -277,19 +300,24 @@ def _maybe_build_web(no_build: bool) -> None:
 
     from .api.app import web_build_dir
 
-    if web_build_dir():
-        return  # already built
     web = Path(jobcut.__file__).resolve().parents[2] / "web"
     if not (web / "package.json").exists():
         return  # installed without the web sources (e.g. a wheel) — nothing to build
+
+    built = web_build_dir()
+    stale = bool(built) and _web_is_stale(web, web / "out")
+    if built and not stale:
+        return  # up to date
     if no_build:
         return
     npm = shutil.which("npm")
     if not npm:
-        print("  console: Node/npm not found — serving the API only.")
-        print("           install Node 20.9+ from https://nodejs.org, then re-run `jobcut serve`.")
-        return
-    print("  console: first run — building the web console (this happens once)…")
+        if not built:
+            print("  console: Node/npm not found — serving the API only.")
+            print("           install Node 20.9+ from https://nodejs.org, then re-run `jobcut serve`.")
+        return  # stale-but-present build is still usable without Node
+
+    print("  console: building the web console" + (" (update detected)…" if stale else " (first run)…"))
     try:
         if not (web / "node_modules").exists():
             subprocess.run([npm, "install"], cwd=web, check=True)
