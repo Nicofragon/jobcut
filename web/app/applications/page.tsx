@@ -690,12 +690,10 @@ function TrackerList({
       ? (a.company_name ?? "").localeCompare(b.company_name ?? "")
       : (b.updated_at ?? "").localeCompare(a.updated_at ?? ""); // recent first
 
-  const groups = presentBuckets
-    .map((b) => ({
-      b,
-      items: visible.filter((r) => bucketOf(r.status_category) === b.key).sort(sorter),
-    }))
-    .filter((g) => g.items.length > 0);
+  // One flat row per application (B-6) — they're all already-applied roles, so grouping by
+  // category just fragments the list. The status pill on each row shows its current stage;
+  // the chips above filter, the dropdown sorts.
+  const sorted = visible.slice().sort(sorter);
 
   return (
     <section className="space-y-4">
@@ -730,22 +728,11 @@ function TrackerList({
         ))}
       </div>
 
-      <div className="space-y-6">
-        {groups.map(({ b, items }) => (
-          <div key={b.key} className="space-y-2.5">
-            {filter === "all" && (
-              <div className="flex items-center gap-2 text-sm font-medium text-on-surface-variant">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: bucketColor(b.key) }} />
-                {b.label}
-                <span className="text-on-surface-faint">· {items.length}</span>
-              </div>
-            )}
-            {items.map((r) => (
-              <AppRow key={r.job_id} row={r} onRemove={onRemove} onChanged={onChanged} />
-            ))}
-          </div>
+      <div className="space-y-2.5">
+        {sorted.map((r) => (
+          <AppRow key={r.job_id} row={r} onRemove={onRemove} onChanged={onChanged} />
         ))}
-        {visible.length === 0 && (
+        {sorted.length === 0 && (
           <p className="text-sm text-on-surface-variant">No applications in this stage.</p>
         )}
       </div>

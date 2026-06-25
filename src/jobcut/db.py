@@ -551,15 +551,15 @@ def stage_durations(conn: sqlite3.Connection, now: str | None = None) -> dict:
       - `days_in_stage`/`since` = "entered current stage" = the ts of its latest
         `status_change` event; falls back to `applied_at` (then `updated_at`) for rows
         with no recorded transition (e.g. imported trackers). This clock drives the
-        Applied->no_response aging, `by_stage_time`, and the `dormant` flag — only a real
-        status change resets it (a note/interview does NOT advance the stage).
+        Applied->no_response aging and `by_stage_time` — only a real status change resets
+        it (a note/interview does NOT advance the stage).
       - last-activity = the ts of the latest event of ANY tracked kind
-        (status_change/interview/note/next_action). This separate clock drives the
-        `stalled` nudge ONLY (B-3), so an actively-interviewing app with a recent
-        interview round or note isn't falsely flagged stalled.
+        (status_change/interview/note/next_action). This clock drives BOTH the `stalled`
+        and `dormant` nudges (B-3), so an actively-interviewing app with a recent interview
+        round or note is flagged as neither — even if its status hasn't changed in months.
     For an OPEN application (live / Applied / Offer):
       - `stalled`  = no ACTIVITY for STALLED_DAYS+ days, and not already dormant
-      - `dormant`  = in the SAME stage for DORMANT_DAYS+ days (probably dead — archive)
+      - `dormant`  = no ACTIVITY for DORMANT_DAYS+ days (probably dead — archive)
     Returns {job_id: {category, since, days_in_stage, stalled, dormant}}. `now` is
     injectable for deterministic tests.
     """
@@ -598,9 +598,13 @@ def stage_durations(conn: sqlite3.Connection, now: str | None = None) -> dict:
         activity_days = _days(last_activity.get(jid) or since)
         category = a["status_category"]
         is_open = category in status.OPEN and days is not None
-        # dormant = probably dead: in the SAME stage for DORMANT_DAYS+ (entered-stage clock).
-        dormant = bool(is_open and days >= DORMANT_DAYS)
-        # stalled = needs a nudge: no ACTIVITY for STALLED_DAYS+, and not already dormant.
+        # Both nudges key off the ACTIVITY clock (B-3): an app touched recently — a new
+        # interview round, a note — is neither stalled nor dead, even if its *status* hasn't
+        # changed in months. status_change counts as activity, so activity_days <=
+        # days_in_stage always → these are a strict subset of the entered-stage thresholds.
+        # dormant = no ACTIVITY for DORMANT_DAYS+ (probably dead — archive).
+        dormant = bool(is_open and activity_days is not None and activity_days >= DORMANT_DAYS)
+        # stalled = no ACTIVITY for STALLED_DAYS+, and not already dormant (needs a nudge).
         stalled = bool(not dormant and activity_days is not None
                        and category in status.STALLABLE and activity_days >= STALLED_DAYS)
         out[jid] = {"category": category, "since": since, "days_in_stage": days,
