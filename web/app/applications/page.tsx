@@ -154,7 +154,9 @@ function NeedsAttention({ rows }: { rows: Row[] }) {
   const router = useRouter();
   const items = attentionItems(rows);
   const dormant = rows.filter((r) => r.dormant).length;
-  if (items.length === 0 && dormant === 0) return null;
+  // B-7: "Needs attention" is the act-now list. With nothing actionable, hide the whole
+  // section (no empty "all clear" card). The dormant count still shows in the Pipeline panel.
+  if (items.length === 0) return null;
   const shown = items.slice(0, ATTN_CAP);
   const overdue = items.filter((i) => i.tone === "overdue").length;
 
@@ -172,9 +174,6 @@ function NeedsAttention({ rows }: { rows: Row[] }) {
           </span>
         )}
       </div>
-      {items.length === 0 && (
-        <p className="px-2.5 text-sm text-on-surface-variant">Nothing due — you&apos;re on top of it. 🎉</p>
-      )}
       <ul className="space-y-1.5">
         {shown.map((it) => (
           <li key={it.row.job_id}>
