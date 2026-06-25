@@ -68,3 +68,6 @@ screenshots_dashboard/
 
 # --- Build-time working agreement (internal, not for the public repo) -------
 CLAUDE.md
+
+# Local-only planning & strategy docs (never published)
+.planning/
