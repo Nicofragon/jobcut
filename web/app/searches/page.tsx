@@ -130,6 +130,7 @@ function SearchCard({ search, onChanged }: { search: StructuredSearch; onChanged
   const [paused, setPaused] = useState(search.paused);
   const [msg, setMsg] = useState<string | null>(null);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm({ ...form, [k]: v });
+  const patch = (p: Partial<Form>) => setForm({ ...form, ...p });
 
   const ready = form.titles.length > 0 && !needsGeoid;
 
@@ -203,7 +204,7 @@ function SearchCard({ search, onChanged }: { search: StructuredSearch; onChanged
               Delete
             </button>
           </div>
-          <SearchFields form={form} set={set} needsGeoid={needsGeoid} />
+          <SearchFields form={form} set={set} patch={patch} needsGeoid={needsGeoid} />
           <ActorPreview form={form} />
         </div>
       )}
@@ -241,15 +242,18 @@ const EMPLOYMENT_OPTIONS = [
 function SearchFields({
   form,
   set,
+  patch,
   needsGeoid,
 }: {
   form: Form;
   set: <K extends keyof Form>(k: K, v: Form[K]) => void;
+  patch: (p: Partial<Form>) => void;
   needsGeoid: boolean;
 }) {
   const [advanced, setAdvanced] = useState(form.geo_ids.length > 0);
   return (
     <div className="space-y-4">
+      <ImportFromUrl form={form} patch={patch} onUsedGeoid={() => setAdvanced(true)} />
       <Labeled label="Job titles">
         <TagInput values={form.titles} onChange={(v) => set("titles", v)} placeholder="e.g. Data Analyst — press Enter…" />
       </Labeled>
@@ -307,7 +311,10 @@ function SearchFields({
         <div className="mt-2 space-y-1.5">
           <TagInput values={form.geo_ids} onChange={(v) => set("geo_ids", v)} placeholder="e.g. 91000000 — press Enter…" />
           <p className="text-xs text-on-surface-variant">
-            Optional precision: numeric LinkedIn geo IDs from a jobs-search URL. A plain location name above is enough on its own.
+            Optional precision: numeric LinkedIn geo IDs. Easiest way to get one — use{" "}
+            <strong>Import from a LinkedIn URL</strong> above. Or open a LinkedIn jobs search for your
+            city and copy the number after <code>geoId=</code> in the address bar (e.g.{" "}
+            <code>geoId=100994331</code> → Madrid). A plain location name above is enough on its own.
           </p>
         </div>
       </details>
@@ -376,6 +383,7 @@ function NewSearch({ onCreated }: { onCreated: () => void }) {
   const [form, setForm] = useState<Form>(empty);
   const [msg, setMsg] = useState<string | null>(null);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm({ ...form, [k]: v });
+  const patch = (p: Partial<Form>) => setForm({ ...form, ...p });
 
   async function create() {
     try {
@@ -403,7 +411,7 @@ function NewSearch({ onCreated }: { onCreated: () => void }) {
             className={inputCls}
           />
         </Labeled>
-        <SearchFields form={form} set={set} needsGeoid={false} />
+        <SearchFields form={form} set={set} patch={patch} needsGeoid={false} />
         <div className="flex items-center gap-2">
           <button onClick={create} disabled={!name.trim()} className={btnPrimary}>
             Create search
@@ -412,6 +420,92 @@ function NewSearch({ onCreated }: { onCreated: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// LinkedIn jobs-search URL → the actor fields. Pulls geoId, keywords (→ title) and
+// work type (f_WT: 1 office · 2 remote · 3 hybrid) out of the query string so users
+// don't have to decode the URL by hand.
+function parseLinkedInSearch(url: string): { geoId?: string; title?: string; workType?: string } {
+  let q: URLSearchParams;
+  try {
+    q = new URL(url.trim()).searchParams;
+  } catch {
+    return {};
+  }
+  const WT: Record<string, string> = { "1": "office", "2": "remote", "3": "hybrid" };
+  return {
+    geoId: q.get("geoId") || undefined,
+    title: q.get("keywords")?.trim() || undefined,
+    workType: WT[(q.get("f_WT") || "").split(",")[0]] || undefined,
+  };
+}
+
+function ImportFromUrl({
+  form,
+  patch,
+  onUsedGeoid,
+}: {
+  form: Form;
+  patch: (p: Partial<Form>) => void;
+  onUsedGeoid: () => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function importUrl() {
+    const { geoId, title, workType } = parseLinkedInSearch(url);
+    if (!geoId && !title && !workType) {
+      setMsg("Couldn't read that — paste a full linkedin.com/jobs/search URL.");
+      return;
+    }
+    const p: Partial<Form> = {};
+    const added: string[] = [];
+    if (title && form.titles.length === 0) {
+      p.titles = [title];
+      added.push(`title “${title}”`);
+    }
+    if (workType && !form.work_types.includes(workType)) {
+      p.work_types = [...form.work_types, workType];
+      added.push(`work type ${workType}`);
+    }
+    if (geoId && !form.geo_ids.includes(geoId)) {
+      p.geo_ids = [...form.geo_ids, geoId];
+      added.push(`geoId ${geoId}`);
+      onUsedGeoid();
+    }
+    patch(p);
+    setUrl("");
+    setMsg(added.length ? `Added ${added.join(" · ")}.` : "Those fields are already set — nothing to add.");
+  }
+
+  return (
+    <details className="rounded-lg border border-border bg-surface-alt p-3">
+      <summary className="cursor-pointer text-sm font-medium text-on-surface">Import from a LinkedIn URL</summary>
+      <p className="mt-2 text-xs text-on-surface-variant">
+        On LinkedIn, search jobs for your role and city, then copy the page URL from the address bar and
+        paste it here — we&apos;ll fill in the title, the location code (geoId) and the work type. Your
+        existing fields are kept.
+      </p>
+      <div className="mt-2 flex gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              importUrl();
+            }
+          }}
+          placeholder="https://www.linkedin.com/jobs/search/?keywords=…&geoId=…"
+          className={inputCls}
+        />
+        <button onClick={importUrl} disabled={!url.trim()} className={btnPrimary}>
+          Import
+        </button>
+      </div>
+      {msg && <p className="mt-1.5 text-xs text-on-surface-variant">{msg}</p>}
+    </details>
   );
 }
 
