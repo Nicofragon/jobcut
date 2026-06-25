@@ -239,9 +239,18 @@ def test_applied_aging_clock_ignores_notes(conn):
     assert d["days_in_stage"] == 35  # still measured from the status_change, not the note
 
 
-def test_dormant_not_suppressed_by_recent_note(conn):
-    # 100 days in Interview but a recent note: dormant still fires; stalled does not.
+def test_recent_activity_clears_dormant(conn):
+    # B-3: 100 days in Interview but a recent interview round → NOT dead. Both nudges key
+    # off the activity clock, so an actively-interviewing app is neither dormant nor stalled.
     db.set_application_status(conn, "2", "interview", now="2026-03-01T00:00:00")
-    db.add_event(conn, "2", "note", body="ping", now="2026-06-01T00:00:00")
+    db.add_event(conn, "2", "interview", body="round 3", now="2026-06-08T00:00:00")
+    d = db.stage_durations(conn, now="2026-06-09T00:00:00")["2"]
+    assert d["dormant"] is False and d["stalled"] is False
+    assert d["days_in_stage"] == 100  # the entered-stage clock is unchanged (informational)
+
+
+def test_no_activity_past_threshold_is_dormant(conn):
+    # No event of any kind for DORMANT_DAYS+ → dormant (probably dead), and not stalled.
+    db.set_application_status(conn, "2", "interview", now="2026-03-01T00:00:00")
     d = db.stage_durations(conn, now="2026-06-09T00:00:00")["2"]
     assert d["dormant"] is True and d["stalled"] is False
