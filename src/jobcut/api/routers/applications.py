@@ -7,7 +7,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ... import db, process, status as status_mod
+from ... import db, ingest, process, status as status_mod
 from ..deps import get_conn
 
 router = APIRouter(prefix="/applications", tags=["applications"])
@@ -41,6 +41,15 @@ class ProcessIn(BaseModel):
 class AdvanceIn(BaseModel):
     note: str = ""
     date: str | None = None
+
+
+class ManualJobIn(BaseModel):
+    url: str = ""
+    company: str = ""
+    title: str = ""
+    location: str = ""
+    description: str = ""
+    status: str = "applied"
 
 
 # Caller-writable event kinds (status_change is internal — written by set_status only).
@@ -87,6 +96,24 @@ def interview_funnel(conn: sqlite3.Connection = Depends(get_conn)):
 @router.get("/process-timing")
 def process_timing_agg(conn: sqlite3.Connection = Depends(get_conn)):
     return db.process_timing_summary(conn)
+
+
+@router.post("/manual")
+def add_manual(body: ManualJobIn, conn: sqlite3.Connection = Depends(get_conn)):
+    """Create an offer manually (source='manual') and link an application (the web
+    "+ Add application" form). Returns the enriched application row (title/company)."""
+    try:
+        result = ingest.add_job(body.model_dump(exclude={"status"}), conn)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    jid = result["job_id"]
+    db.set_application_status(conn, jid, body.status, source="manual")
+    df = db.read_applications_enriched(conn)
+    rows = df[df.job_id == str(jid)]
+    if rows.empty:
+        raise HTTPException(status_code=500, detail="application not found after create")
+    rec = rows.astype(object).where(rows.notna(), None).to_dict("records")[0]
+    return rec
 
 
 @router.get("/{job_id}")
