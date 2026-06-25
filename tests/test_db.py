@@ -331,6 +331,28 @@ def test_age_stale_applications(conn):
     assert db.age_stale_applications(conn, now="2026-06-24T10:00:00") == 0
 
 
+def test_funnel_cumulative_counts_history_not_just_now(conn):
+    # 1: Applied → Interview → Rejected (ever reached interview, even though now terminal)
+    db.set_application_status(conn, "1", "applied", now="2026-05-01T10:00:00")
+    db.set_application_status(conn, "1", "interview", now="2026-05-10T10:00:00")
+    db.set_application_status(conn, "1", "rejected", now="2026-05-20T10:00:00")
+    # 2: Applied → No response (only ever reached Applied)
+    db.set_application_status(conn, "2", "applied", now="2026-05-01T10:00:00")
+    db.set_application_status(conn, "2", "no_response", now="2026-06-15T10:00:00")
+    # 3: an interview ROUND logged without a status_change to interview (still counts)
+    db.set_application_status(conn, "3", "applied", now="2026-05-01T10:00:00")
+    db.add_event(conn, "3", "interview", body="R1", now="2026-05-15T10:00:00")
+    r = db.application_funnel_cumulative(conn)
+    assert r["applied"] == 3
+    assert r["screen"] == 2          # 1 and 3 reached interview (>= screen); 2 did not
+    assert r["interview"] == 2       # 1 (status history) and 3 (interview round)
+    assert r["offer"] == 0
+    # the live funnel still shows the current snapshot, the new key is additive
+    f = db.application_funnel(conn, now="2026-06-24T10:00:00")
+    assert f["reached"] == r
+    assert f["counts"].get("Interview") is None  # nobody is *currently* in interview
+
+
 def test_funnel_reports_stalled_dormant_and_stage_time(conn):
     db.set_application_status(conn, "1", "interview", now="2026-06-01T10:00:00")  # 23d stalled
     db.set_application_status(conn, "2", "applied", now="2026-06-22T10:00:00")    # 2d fresh

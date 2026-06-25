@@ -661,7 +661,46 @@ def application_funnel(conn: sqlite3.Connection, now: str | None = None) -> dict
         if d["category"] in status.OPEN and d["days_in_stage"] is not None:
             acc.setdefault(d["category"], []).append(d["days_in_stage"])
     result["by_stage_time"] = {k: round(sum(v) / len(v), 1) for k, v in acc.items()}
+    result["reached"] = application_funnel_cumulative(conn)
     return result
+
+
+# Funnel-stage rank for the cumulative funnel (B-12). Higher = further along.
+_STAGE_RANK = {"Offer": 4, "Interview": 3, "Screen": 2, "Active": 2, "Reviewing": 2, "Applied": 1}
+
+
+def application_funnel_cumulative(conn: sqlite3.Connection) -> dict:
+    """How many applications EVER reached each funnel stage, from the event history —
+    so a role rejected/ghosted after an interview still counts toward "reached interview"
+    (the current-status funnel drops it into a terminal bucket). Returns
+    {applied, screen, interview, offer}. Saved (non-funnel) rows are excluded.
+
+    Per app, the max stage rank it ever touched: its current category, plus every
+    `status_change` destination and any `interview` round in the timeline; baseline is
+    Applied for any non-Saved row (it did apply).
+    """
+    max_rank: dict[str, int] = {}
+    for a in conn.execute("SELECT job_id, status_category FROM applications").fetchall():
+        if a["status_category"] in status.NON_FUNNEL:
+            continue
+        jid = str(a["job_id"])
+        max_rank[jid] = max(1, _STAGE_RANK.get(a["status_category"], 0))
+    for e in conn.execute(
+        "SELECT job_id, kind, to_status FROM application_events "
+        "WHERE kind IN ('status_change','interview')").fetchall():
+        jid = str(e["job_id"])
+        if jid not in max_rank:  # Saved or no application row
+            continue
+        rank = 3 if e["kind"] == "interview" else _STAGE_RANK.get(status.classify(e["to_status"] or ""), 0)
+        if rank > max_rank[jid]:
+            max_rank[jid] = rank
+    ranks = list(max_rank.values())
+    return {
+        "applied": sum(1 for r in ranks if r >= 1),
+        "screen": sum(1 for r in ranks if r >= 2),
+        "interview": sum(1 for r in ranks if r >= 3),
+        "offer": sum(1 for r in ranks if r >= 4),
+    }
 
 
 def interview_funnel(conn: sqlite3.Connection) -> list[dict]:

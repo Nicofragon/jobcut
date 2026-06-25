@@ -90,6 +90,9 @@ export type Funnel = {
   stalled_count?: number;
   dormant_count?: number;
   by_stage_time?: Record<string, number>;
+  // B-12 (additive): how many applications EVER reached each stage (from event history),
+  // not just those currently in it.
+  reached?: { applied: number; screen: number; interview: number; offer: number };
 };
 
 export type Health = {
