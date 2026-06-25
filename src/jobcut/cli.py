@@ -350,6 +350,58 @@ def _maybe_build_web(no_build: bool) -> None:
         print("           build it manually with:  cd web && npm install && npm run build")
 
 
+def _port_in_use(host: str, port: int) -> bool:
+    """True if something is already bound to (host, port). SO_REUSEADDR keeps a socket
+    lingering in TIME_WAIT from reading as 'in use' — only a live listener counts."""
+    import errno
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+            return False
+        except OSError as e:
+            return e.errno in (errno.EADDRINUSE, errno.EACCES)
+
+
+def _pids_on_port(port: int) -> list[int]:
+    """Best-effort PIDs listening on the TCP port (posix, via lsof). [] if undiscoverable
+    (lsof missing, Windows) — callers fall back to printing a manual command."""
+    import subprocess
+
+    try:
+        out = subprocess.run(["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"],
+                             capture_output=True, text=True, timeout=5)
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return []
+    return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
+
+
+def _free_port(host: str, port: int) -> bool:
+    """Terminate whatever holds the port (SIGTERM, then SIGKILL stragglers) and wait for
+    it to free up. Returns True if the port is free afterwards."""
+    import os
+    import signal
+    import time
+
+    pids = _pids_on_port(port)
+    if not pids:
+        return not _port_in_use(host, port)
+    print(f"  --replace: stopping {len(pids)} process(es) on :{port} ({', '.join(map(str, pids))})…")
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+        for _ in range(20):  # up to ~2s for the port to clear before escalating
+            if not _port_in_use(host, port):
+                return True
+            time.sleep(0.1)
+    return not _port_in_use(host, port)
+
+
 def cmd_serve(args) -> int:
     """Launch the API (and the static console if built) in one process; --open the browser."""
     try:
@@ -359,6 +411,27 @@ def cmd_serve(args) -> int:
         return 1
     from . import paths
     from .api.app import web_build_dir
+
+    # Pre-flight: refuse to start on an occupied port. uvicorn prints its success banner
+    # *before* it binds, so a bind clash otherwise reads as a fake "serving…" followed by
+    # an error — and the stale process (often a previous `jobcut serve` running OLD code)
+    # keeps answering, which is exactly the confusing failure we want to avoid.
+    if _port_in_use(args.host, args.port):
+        if getattr(args, "replace", False):
+            if not _free_port(args.host, args.port):
+                print(f"Could not free port {args.port}. Stop it manually, then retry:")
+                print(f"    lsof -ti tcp:{args.port} | xargs kill")
+                return 1
+        else:
+            pids = _pids_on_port(args.port)
+            who = f" (PID {', '.join(map(str, pids))})" if pids else ""
+            print(f"Port {args.port} is already in use{who} — likely a previous `jobcut serve` "
+                  "(maybe running old code).")
+            print("Fix it one of these ways:")
+            print(f"    jobcut serve --replace            # stop it and take over :{args.port}")
+            print(f"    lsof -ti tcp:{args.port} | xargs kill   # free the port yourself")
+            print(f"    jobcut serve --port {args.port + 1}            # use a different port")
+            return 1
 
     paths.data_dir().mkdir(parents=True, exist_ok=True)
     _maybe_build_web(getattr(args, "no_build", False))
@@ -484,6 +557,8 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--port", type=int, default=8000, help="bind port (default 8000)")
     ps.add_argument("--open", action="store_true", help="open the console in your browser")
     ps.add_argument("--no-build", action="store_true", help="don't auto-build the web console if it's missing")
+    ps.add_argument("--replace", action="store_true",
+                    help="if the port is busy, stop the process holding it and take over")
     ps.set_defaults(func=cmd_serve)
 
     sub.add_parser("dashboard", help="launch the Streamlit dashboard").set_defaults(func=cmd_dashboard)

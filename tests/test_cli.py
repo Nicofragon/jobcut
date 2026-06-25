@@ -54,6 +54,50 @@ def test_bundled_config_matches_defaults():
     assert shipped["routing"]["home"] == config.DEFAULTS["routing"]["home"]
 
 
+def test_port_in_use_detects_listener():
+    import socket
+
+    from jobcut.cli import _port_in_use
+
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()
+    port = srv.getsockname()[1]
+    try:
+        assert _port_in_use("127.0.0.1", port) is True
+    finally:
+        srv.close()
+    # a closed listener's port reads as free again
+    assert _port_in_use("127.0.0.1", port) is False
+
+
+def test_serve_refuses_busy_port_without_replace(_isolated, capsys, monkeypatch):
+    """On an occupied port, `serve` (no --replace) must fail fast with an actionable
+    message and never reach uvicorn — not print a fake 'serving…' banner."""
+    import socket
+
+    import jobcut.cli as cli
+
+    called = {"run": False}
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: called.__setitem__("run", True))
+
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()
+    port = srv.getsockname()[1]
+    try:
+        rc = cli.main(["serve", "--port", str(port)])
+    finally:
+        srv.close()
+    assert rc == 1
+    assert called["run"] is False  # never tried to bind/serve
+    out = capsys.readouterr().out
+    assert f"Port {port} is already in use" in out
+    assert "--replace" in out
+
+
 def test_stats_json_is_clean_read_only_payload(_isolated, capsys):
     """`jobcut stats --json` prints a JSON pipeline payload (read path for Claude).
 
