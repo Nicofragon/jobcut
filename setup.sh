@@ -16,13 +16,13 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 say()  { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m!\033[0m  %s\n' "$*"; }
 
-# 1) Python 3.10+
+# 1) Python 3.11+
 if ! command -v python3 >/dev/null 2>&1; then
-  echo "Python 3.10+ is required but 'python3' was not found. Install it from https://python.org"
+  echo "Python 3.11+ is required but 'python3' was not found. Install it from https://python.org"
   exit 1
 fi
-if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
-  echo "Python 3.10+ is required (found $(python3 -V))."
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
+  echo "Python 3.11+ is required (found $(python3 -V))."
   exit 1
 fi
 

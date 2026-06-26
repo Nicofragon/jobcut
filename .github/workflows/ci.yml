@@ -7,8 +7,35 @@ on:
 
 jobs:
   python:
+    # Matrix over the supported Python floor (3.11) and the dev version (3.12) so the
+    # `requires-python = ">=3.11"` claim is actually proven, not just asserted (E3b).
+    # The floor is 3.11 because apify-client's 3.x line (pinned in pyproject) needs it.
     name: python (pytest + ruff)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install (with api/dev/cv extras)
+        run: pip install -e ".[api,dev,cv]"
+      - name: Lint
+        run: ruff check src/jobcut tests dashboard
+      - name: Test
+        run: pytest -q
+
+  # Second-OS smoke for KR5 ("works on macOS, Linux and Windows"): Linux is covered by
+  # the `python` job above; this proves macOS too. Gated to pushes on main so PRs stay
+  # cheap (macOS runners bill at 10× minutes); native Windows is supported via WSL,
+  # which is the same Linux path.
+  smoke-macos:
+    name: smoke (macOS · pytest)
+    runs-on: macos-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,8 +43,6 @@ jobs:
           python-version: "3.12"
       - name: Install (with api/dev/cv extras)
         run: pip install -e ".[api,dev,cv]"
-      - name: Lint
-        run: ruff check src/jobcut tests dashboard
       - name: Test
         run: pytest -q
 
