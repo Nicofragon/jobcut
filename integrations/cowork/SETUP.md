@@ -12,7 +12,7 @@ top-to-bottom and have a working bridge.
 
 ## 1. What you're installing
 
-Seven skills (each a folder under [`skills/`](skills/)):
+Eight skills (each a folder under [`skills/`](skills/)):
 
 | Skill | What it does |
 |-------|--------------|
@@ -21,6 +21,7 @@ Seven skills (each a folder under [`skills/`](skills/)):
 | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** What to apply to (top 10), pipeline/weekly stats (`stats --json`), or open the web console (`serve --open`) |
 | [`jobcut-track`](skills/jobcut-track/SKILL.md) | **Write.** Update an application from chat — note, interview round, status, or fields — written back via `ingest-events` |
 | [`jobcut-add`](skills/jobcut-add/SKILL.md) | **Write.** Paste a job URL → Claude fetches it, extracts company/title/location, and saves the job (optionally as an application) via `add-job` |
+| [`jobcut-open`](skills/jobcut-open/SKILL.md) | Start the web console from chat (background) and hand back the URL — no terminal |
 | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile (`market --json`) |
 | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull the latest code, reinstall if deps changed, rebuild + restart the console (fixes "still see the old design") |
 
@@ -41,12 +42,13 @@ Copy the skill folders into your Claude skills directory (for Claude Code that's
 `~/.claude/skills/`; Cowork uses the same per-user skills location):
 
 ```bash
-# from the repo root — copy all seven
+# from the repo root — copy all eight
 cp -R integrations/cowork/skills/jobcut-daily   ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-score   ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-review  ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-track   ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-add     ~/.claude/skills/
+cp -R integrations/cowork/skills/jobcut-open    ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-market  ~/.claude/skills/
 cp -R integrations/cowork/skills/jobcut-update  ~/.claude/skills/
 ```
