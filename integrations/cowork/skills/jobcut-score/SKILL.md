@@ -84,6 +84,12 @@ and is just as direct.
 
 - Read-only commands: `jobcut unscored --json`, `jobcut surface --json`. The only
   writer is `jobcut ingest-scores`. No raw SQL, ever.
+- **`match_reasons` is the *scoring rationale* — yours alone.** It explains *why a job
+  scored what it did* ("BI Analyst +25; Madrid híbrido +15; …") and is written **only**
+  by this skill via `ingest-scores`. It is **not** a place to record notes, reminders,
+  or anything the user *tells you happened* — that's a **note** and goes through
+  `jobcut-track` (`kind:"note"`), where it shows in "Notes & activity". Putting a note
+  in `match_reasons` makes it invisible as a note and corrupts the score's "why" line.
 - This skill does **not** pull from Apify (no cost). To also fetch new jobs first, use
   the `jobcut-daily` skill, then this one to score. To then pick what to apply to (top
   10) or open the console, hand off to **jobcut-review**.

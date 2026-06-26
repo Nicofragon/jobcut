@@ -12,10 +12,11 @@ top-to-bottom and have a working bridge.
 
 ## 1. What you're installing
 
-Eight skills (each a folder under [`skills/`](skills/)):
+Nine skills (each a folder under [`skills/`](skills/)):
 
 | Skill | What it does |
 |-------|--------------|
+| [`jobcut`](skills/jobcut/SKILL.md) | **Front door.** Run first in a session: confirms the jobcut skills are loaded + the CLI/data dir resolve, says what's missing if not, then routes you to the right skill |
 | [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | `jobcut pull` each saved search (local Apify client, no MCP) → score → `surface` the top matches |
 | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Score (or re-score) jobs already in the DB with Claude, written straight back via `ingest-scores` — no Apify, no manual JSON |
 | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** What to apply to (top 10), pipeline/weekly stats (`stats --json`), or open the web console (`serve --open`) |
@@ -38,24 +39,26 @@ Eight skills (each a folder under [`skills/`](skills/)):
 
 ## 3. Install the skills
 
-Copy the skill folders into your Claude skills directory (for Claude Code that's
-`~/.claude/skills/`; Cowork uses the same per-user skills location):
+Run the installer from the repo root — it copies **all** the skill folders into your
+Claude skills directory and verifies each one landed:
 
 ```bash
-# from the repo root — copy all eight
-cp -R integrations/cowork/skills/jobcut-daily   ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-score   ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-review  ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-track   ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-add     ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-open    ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-market  ~/.claude/skills/
-cp -R integrations/cowork/skills/jobcut-update  ~/.claude/skills/
+bash integrations/cowork/install.sh            # -> ~/.claude/skills (Claude Code)
+bash integrations/cowork/install.sh <dir>      # -> your Cowork skills directory
 ```
 
-Keep each skill's folder intact (the `SKILL.md` must stay inside its folder). Restart
-/ reload Claude so it picks up the new skills, then confirm it can see
-`jobcut-daily` and `jobcut-market`.
+> **Claude Code and Cowork read *different* directories — this matters.**
+> Claude **Code** indexes `~/.claude/skills/` (the default above). Claude **Cowork**
+> indexes **its own** skills directory — often your notes/vault's `.claude/skills/`,
+> **not** the home one. If you drive jobcut from Cowork, pass *that* directory to the
+> installer; installing only into `~/.claude/skills/` makes the skills visible to
+> Claude Code but **invisible to Cowork** (Claude will then quietly improvise instead
+> of using the skill). Not sure which path your Cowork uses? Install into both.
+
+After installing, **reload Claude** (Code or Cowork) so it picks up the new skills,
+then ask it to **run the `jobcut` skill** — it confirms every skill is loaded and the
+CLI/data dir resolve, and tells you exactly what's missing if not. (Each skill is a
+folder with its `SKILL.md` inside; the installer keeps that intact.)
 
 ## 4. Configure the data dir
 
@@ -99,6 +102,9 @@ of a fresh pull, so Apify isn't paid twice.
 
 In Claude (Cowork/Code), just ask:
 
+- **“let's work on jobcut” / “is jobcut ready?”** → runs the `jobcut` front door:
+  confirms every skill is loaded and the CLI/data dir resolve, says what to fix if not,
+  then routes you to the right skill. A good first thing to say each session.
 - **“run jobcut-daily”** → pulls, imports, scores, and shows today's top matches.
 - **“score my jobs”** → runs `jobcut-score`: Claude scores the jobs already in the DB
   and writes them back (no Apify, no manual JSON).
