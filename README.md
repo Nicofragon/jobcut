@@ -106,7 +106,7 @@ jobcut dashboard
 ```
 </details>
 
-**Platforms.** `setup.sh` targets macOS/Linux (Python 3.10+; Node 20.9+ optional, only
+**Platforms.** `setup.sh` targets macOS/Linux (Python 3.11+; Node 20.9+ optional, only
 for the web console). On Windows, use WSL or the manual steps above. Schedule the daily
 pull with launchd / cron / Task Scheduler — see [`scheduler/`](scheduler/).
 

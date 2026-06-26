@@ -75,7 +75,7 @@ reimplementando la DB); status de aplicación en tabla propia; targeting derivad
 
 ## 3. Instalación
 
-**Requisitos:** Python 3.10+ (siempre). Node 20.9+ **solo para construir** el console
+**Requisitos:** Python 3.11+ (siempre). Node 20.9+ **solo para construir** el console
 (no para correrlo). macOS / Linux / Windows.
 
 ```bash
