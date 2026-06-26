@@ -1,14 +1,17 @@
 ---
 name: jobcut
 description: >-
-  Front door for driving jobcut from chat. Run this FIRST when a user starts
-  working with jobcut in a session — it confirms the jobcut skills are loaded and
-  the CLI + data dir resolve, then routes the request to the right skill. Use when
-  the user says things like "let's work on my job search", "open jobcut", "is
-  jobcut set up / ready?", "what can you do with my jobs?", "jobcut isn't working /
-  you can't find the skill", or whenever you're about to take a jobcut action and
-  haven't checked readiness yet. Read-only and orchestration only — it verifies and
-  dispatches; the specialised jobcut-* skills do the actual work.
+  Front door for USING the jobcut app to run a user's job search from chat — NOT
+  for developing or testing the jobcut codebase. Use this whenever the user wants
+  to work with jobcut or asks about their jobs/applications/pipeline, and ALWAYS
+  when they say "is jobcut ready?", "is jobcut set up?", "let's work on my job
+  search", "open jobcut", "what can you do with my jobs?", or "jobcut isn't working
+  / you can't find the skill". It confirms the jobcut skills are loaded and the
+  jobcut CLI + data dir resolve, then routes the request to the right jobcut-* skill.
+  "Ready" here means the skills + CLI + data are set up — it does NOT mean "are the
+  tests/build/CI green", so do not run pytest, ruff, npm build, or a sandbox to
+  answer it. Read-only and orchestration only — it verifies and dispatches; the
+  specialised jobcut-* skills do the actual work.
 ---
 
 # jobcut (front door)
@@ -18,6 +21,17 @@ It does three things, in order: **(1) check you're ready, (2) if not, tell the u
 exactly what's missing and how to fix it — never improvise around a missing skill,
 (3) route the request to the right jobcut-* skill.** It never writes the database
 itself; it dispatches.
+
+## This is not a code-health check — read first
+
+jobcut is a tool the user **runs** to manage their job search; here you are helping
+them **use** it, not develop it. So when the user asks "is jobcut ready?" (or "set
+up", "working"), they mean *"are the jobcut skills + CLI + my data set up so you can
+run my job search"* — **not** "is the code healthy". Do **not** run the test suite,
+`ruff`, `npm run build`, the web build, or boot a sandbox to answer it — that's
+contributing to the code, a different job (see `AGENTS.md` / `CLAUDE.md`). Answer with
+the three quick checks in step 1 below. Only touch tests/builds if the user explicitly
+asks you to change or debug the jobcut source itself.
 
 ## 1. Readiness check (run once at the start of a jobcut session)
 
