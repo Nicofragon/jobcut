@@ -17,23 +17,27 @@ def _isolated(tmp_path, monkeypatch):
     config.reset_cache()
 
 
-def test_macos_command(tmp_path, monkeypatch, _isolated):
+def test_macos_app(tmp_path, monkeypatch, _isolated):
     monkeypatch.setattr("jobcut.cli.sys.platform", "darwin")
     out = tmp_path / "out"
     out.mkdir()
     rc = main(["shortcut", "--path", str(out), "--port", "8000"])
     assert rc == 0
-    launcher = out / "jobcut.command"
-    assert launcher.exists()
-    assert os.access(launcher, os.X_OK)
-    body = launcher.read_text()
+    app = out / "jobcut.app"
+    assert app.is_dir()
+    exe = app / "Contents" / "MacOS" / "jobcut"
+    assert exe.exists()
+    assert os.access(exe, os.X_OK)
+    body = exe.read_text()
     assert str(_isolated.resolve()) in body
     assert "--port 8000" in body
     assert "http://127.0.0.1:8000" in body
-    assert "jobcut" in body  # references the venv jobcut path
+    # the bundle carries its Info.plist and the shipped brand icon
+    assert (app / "Contents" / "Info.plist").exists()
+    assert (app / "Contents" / "Resources" / "jobcut.icns").exists()
     # re-running overwrites without error (idempotent)
     assert main(["shortcut", "--path", str(out), "--port", "8000"]) == 0
-    assert launcher.exists()
+    assert app.is_dir()
 
 
 def test_linux_desktop(tmp_path, monkeypatch, _isolated):
@@ -46,6 +50,9 @@ def test_linux_desktop(tmp_path, monkeypatch, _isolated):
     body = launcher.read_text()
     assert "[Desktop Entry]" in body
     assert "xdg-open" in body
+    # a real icon and no terminal window (the point of this change)
+    assert "jobcut.png" in body
+    assert "Terminal=false" in body
 
 
 def test_windows_bat(tmp_path, monkeypatch, _isolated):
@@ -58,10 +65,10 @@ def test_windows_bat(tmp_path, monkeypatch, _isolated):
 
 def test_explicit_file_path_is_honored(tmp_path, monkeypatch, _isolated):
     monkeypatch.setattr("jobcut.cli.sys.platform", "darwin")
-    target = tmp_path / "nested" / "my-launcher.command"
+    target = tmp_path / "nested" / "my-launcher.app"
     assert main(["shortcut", "--path", str(target), "--port", "9001"]) == 0
-    assert target.exists()
-    assert "--port 9001" in target.read_text()
+    assert target.is_dir()
+    assert "--port 9001" in (target / "Contents" / "MacOS" / "jobcut").read_text()
 
 
 def test_missing_venv_jobcut_errors(tmp_path, monkeypatch, capsys, _isolated):
