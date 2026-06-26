@@ -23,7 +23,7 @@ import pandas as pd
 
 from . import paths, status
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # jobs columns — mirror pull.flatten() output. job_id is the primary key.
 JOB_COLS = [
@@ -60,6 +60,14 @@ APPLICATION_EVENT_COLS = ["event_id", "job_id", "ts", "kind", "from_status", "to
 # backends can be compared side-by-side. ADDITIVE — never touches `scores` (the
 # single-backend production table) or its behaviour. Written only by compare mode.
 SCORE_RUN_COLS = ["job_id", "backend", "match_score", "match_reasons", "scored_at"]
+
+# salary_estimates (v7): a Claude/Cowork-produced salary band for offers where the
+# employer did NOT disclose one. Its OWN table (like `scores`) — derived + re-derivable,
+# so it never lives in the immutable `jobs` accumulator and never touches the disclosed
+# `salary_*` columns. Keeping it out of `jobs` also means market.salary_pct (disclosure)
+# stays correct with zero changes. `source` is who produced it (e.g. cowork_web); `basis`
+# is the human-readable rationale/source ("Levels.fyi/Glassdoor, Madrid mid BI ~45–55k").
+SALARY_ESTIMATE_COLS = ["job_id", "est_min", "est_max", "currency", "period", "basis", "source", "estimated_at"]
 
 
 def db_path():
@@ -137,6 +145,16 @@ def init_schema(conn: sqlite3.Connection) -> None:
           "to_status" TEXT,
           "body" TEXT DEFAULT '',
           "meta" TEXT DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS salary_estimates (
+          "job_id" TEXT PRIMARY KEY,
+          "est_min" INTEGER,
+          "est_max" INTEGER,
+          "currency" TEXT,
+          "period" TEXT DEFAULT 'year',
+          "basis" TEXT,
+          "source" TEXT DEFAULT 'cowork_web',
+          "estimated_at" TEXT
         );
         CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT);
         CREATE INDEX IF NOT EXISTS idx_jobs_first_seen ON jobs(first_seen);
@@ -247,6 +265,31 @@ def upsert_scores(conn: sqlite3.Connection, rows: list[dict]) -> int:
 def scored_ids(conn: sqlite3.Connection) -> set[str]:
     """job_ids that already have a score (for incremental filtering)."""
     return {r["job_id"] for r in conn.execute("SELECT job_id FROM scores").fetchall()}
+
+
+def upsert_salary_estimates(conn: sqlite3.Connection, rows: list[dict]) -> int:
+    """Upsert salary-estimate rows by job_id (last write wins). Returns count written.
+
+    Writes ONLY to salary_estimates — never touches jobs (disclosed salary) or scores,
+    so re-estimating is as safe as a re-score."""
+    if not rows:
+        return 0
+    sql = (
+        f'INSERT INTO salary_estimates ({",".join(chr(34)+c+chr(34) for c in SALARY_ESTIMATE_COLS)}) '
+        f'VALUES ({",".join("?" * len(SALARY_ESTIMATE_COLS))}) '
+        f'ON CONFLICT(job_id) DO UPDATE SET '
+        + ", ".join(f'"{c}" = excluded."{c}"' for c in SALARY_ESTIMATE_COLS if c != "job_id")
+    )
+    conn.executemany(sql, [[r.get(c) for c in SALARY_ESTIMATE_COLS] for r in rows])
+    conn.commit()
+    return len(rows)
+
+
+def get_salary_estimate_row(conn: sqlite3.Connection, job_id: str):
+    """One salary-estimate row by primary key (O(1)); None if not estimated."""
+    return conn.execute(
+        "SELECT * FROM salary_estimates WHERE job_id = ?", (str(job_id),)
+    ).fetchone()
 
 
 def read_jobs(conn: sqlite3.Connection, columns: list[str] | None = None) -> pd.DataFrame:

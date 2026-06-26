@@ -74,7 +74,7 @@ def test_migration_adds_process_columns_and_bumps_version(tmp_path):
     cols = {r[1] for r in c.execute("PRAGMA table_info(applications)").fetchall()}
     assert {"process_stages", "process_current"} <= cols
     ver = c.execute("SELECT value FROM _meta WHERE key='schema_version'").fetchone()["value"]
-    assert ver == "6"
+    assert ver == str(db.SCHEMA_VERSION)  # records the current schema version (now 7)
     c.close()
     # idempotent: reopening must not duplicate columns or error
     c2 = db.connect(p)

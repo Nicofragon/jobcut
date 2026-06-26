@@ -41,7 +41,7 @@ check what you can actually see and run:
 1. **The jobcut skills are loaded.** Look at the skills available to you in this
    session and confirm these are present:
    `jobcut-daily`, `jobcut-score`, `jobcut-review`, `jobcut-track`, `jobcut-add`,
-   `jobcut-open`, `jobcut-market`, `jobcut-update` (plus this one, `jobcut`).
+   `jobcut-open`, `jobcut-market`, `jobcut-update`, `jobcut-salary` (plus this one, `jobcut`).
 2. **The CLI is installed and on PATH:**
    ```
    jobcut --help
@@ -94,6 +94,7 @@ Report which specific thing failed and which is fine — "8/9 skills loaded,
 | Add a job from a URL (company site / Lever / Greenhouse / expired post) | `jobcut-add` |
 | Open / launch the web console | `jobcut-open` |
 | See market demand vs their skill gaps | `jobcut-market` |
+| Estimate a salary band for offers that don't disclose one | `jobcut-salary` |
 | Update the app to the latest code / "still see the old design" | `jobcut-update` |
 
 If the request is ambiguous, ask one clarifying question rather than guessing a skill.

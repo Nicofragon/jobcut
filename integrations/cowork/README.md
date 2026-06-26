@@ -25,6 +25,7 @@ directly.** Every write goes through the CLI, which is the single schema authori
 | "add this job &lt;url&gt;" / "guardá esta oferta de Lever" / "apliqué a este rol &lt;url&gt;" | [`jobcut-add`](skills/jobcut-add/SKILL.md) | **Write.** Claude fetches the URL, extracts company/title/location, and saves the job (optionally as an application) via `add-job` |
 | "open jobcut" / "abrí jobcut" / "launch the console" | [`jobcut-open`](skills/jobcut-open/SKILL.md) | Start the web console in the background and hand back the URL — no terminal |
 | "what's the market asking for?" / "my skill gaps" | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile |
+| "estimate salaries for my shortlist" / "what would these roles pay?" | [`jobcut-salary`](skills/jobcut-salary/SKILL.md) | **Write.** Estimate a band (web search) for offers with no disclosed salary, via `ingest-salary` — shown "estimated", never overrides a real band |
 | "update jobcut" / "I still see the old design" | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull latest code, reinstall if deps changed, rebuild + restart the console |
 
 Starting a session, just say "let's work on jobcut" — the **jobcut** front door
@@ -50,6 +51,7 @@ Claude never opens `jobcut.db` or writes SQL. It reads and writes only through t
   `jobcut add-job` (add one job manually by URL/fields, `source=manual`; optionally link an application) ·
   `jobcut ingest-scores <file>` (upsert Claude scores, tagged `backend=claude_skills`) ·
   `jobcut ingest-events <file>` (apply application write-ops: notes, interview rounds, status, fields) ·
+  `jobcut ingest-salary <file>` (upsert Cowork-estimated salary bands for offers with none disclosed) ·
   `jobcut score` (run a built-in/rule-based scorer).
 - **Console / lifecycle (no DB writes):**
   `jobcut serve --open` (run the API + web console, auto-rebuilds if stale) ·

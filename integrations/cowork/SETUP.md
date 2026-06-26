@@ -12,7 +12,7 @@ top-to-bottom and have a working bridge.
 
 ## 1. What you're installing
 
-Nine skills (each a folder under [`skills/`](skills/)):
+Ten skills (each a folder under [`skills/`](skills/)):
 
 | Skill | What it does |
 |-------|--------------|
@@ -24,6 +24,7 @@ Nine skills (each a folder under [`skills/`](skills/)):
 | [`jobcut-add`](skills/jobcut-add/SKILL.md) | **Write.** Paste a job URL → Claude fetches it, extracts company/title/location, and saves the job (optionally as an application) via `add-job` |
 | [`jobcut-open`](skills/jobcut-open/SKILL.md) | Start the web console from chat (background) and hand back the URL — no terminal |
 | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile (`market --json`) |
+| [`jobcut-salary`](skills/jobcut-salary/SKILL.md) | **Write.** Estimate a salary band (web search) for offers with no disclosed one, via `ingest-salary` — marked "estimated", never overwrites a real band |
 | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull the latest code, reinstall if deps changed, rebuild + restart the console (fixes "still see the old design") |
 
 ## 2. Prerequisites

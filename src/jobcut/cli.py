@@ -142,6 +142,28 @@ def cmd_ingest_scores(args) -> int:
     return 0
 
 
+def cmd_ingest_salary(args) -> int:
+    """Upsert salary estimates from a JSON file (e.g. produced by a Claude/Cowork salary skill)."""
+    from . import ingest
+    try:
+        summary = ingest.ingest_salary(args.json)
+    except FileNotFoundError:
+        print(f"ingest-salary: file not found: {args.json}")
+        return 1
+    except ValueError as exc:  # bad JSON or wrong shape (JSONDecodeError is a ValueError)
+        print(f"ingest-salary: invalid estimates file ({exc})")
+        return 1
+    msg = f"ingest-salary · wrote {summary['ingested']} estimate(s)"
+    if summary["skipped"]:
+        msg += f", skipped {summary['skipped']} invalid"
+    if summary["unknown_job_ids"]:
+        msg += f", {len(summary['unknown_job_ids'])} job_id(s) not in the jobs table"
+    print(msg)
+    for err in summary["errors"]:
+        print(f"  · skipped: {err}")
+    return 0
+
+
 def cmd_ingest_events(args) -> int:
     """Apply application write-ops from a JSON file (e.g. a Claude/Cowork tracking skill)."""
     from . import ingest
@@ -756,6 +778,12 @@ def build_parser() -> argparse.ArgumentParser:
     pie.add_argument("json", help='path to JSON: a list of {job_id, status?|fields?|kind+body+meta?, date?} '
                                   'or {"events": [...]}')
     pie.set_defaults(func=cmd_ingest_events)
+
+    pisal = sub.add_parser("ingest-salary",
+                           help="upsert salary estimates from a JSON file (e.g. a Claude/Cowork salary skill)")
+    pisal.add_argument("json", help='path to JSON: a list of {job_id, est_min?, est_max?, currency?, '
+                                     'period?, basis?} or {"estimates": [...]}')
+    pisal.set_defaults(func=cmd_ingest_salary)
 
     pij = sub.add_parser("import-jobs",
                          help="upsert scraped job rows from a JSON file (no scrape; for a bridge agent)")
