@@ -22,6 +22,7 @@ directly.** Every write goes through the CLI, which is the single schema authori
 | "what should I apply to?" / "top 10" / "how's my pipeline this week?" / "open the console" | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** Top picks to apply, pipeline/weekly stats, or launch the web console |
 | "Preply passed to R3, scheduled the 30th" / "add a note to Kiwi" / "mark Acme rejected" / "bump X to high priority" | [`jobcut-track`](skills/jobcut-track/SKILL.md) | **Write.** Update an application — note, interview round, status, or fields — via `ingest-events` |
 | "add this job &lt;url&gt;" / "guardá esta oferta de Lever" / "apliqué a este rol &lt;url&gt;" | [`jobcut-add`](skills/jobcut-add/SKILL.md) | **Write.** Claude fetches the URL, extracts company/title/location, and saves the job (optionally as an application) via `add-job` |
+| "open jobcut" / "abrí jobcut" / "launch the console" | [`jobcut-open`](skills/jobcut-open/SKILL.md) | Start the web console in the background and hand back the URL — no terminal |
 | "what's the market asking for?" / "my skill gaps" | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile |
 | "update jobcut" / "I still see the old design" | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull latest code, reinstall if deps changed, rebuild + restart the console |
 
@@ -48,6 +49,7 @@ Claude never opens `jobcut.db` or writes SQL. It reads and writes only through t
   `jobcut score` (run a built-in/rule-based scorer).
 - **Console / lifecycle (no DB writes):**
   `jobcut serve --open` (run the API + web console, auto-rebuilds if stale) ·
+  `jobcut shortcut` (write a double-click desktop launcher for the console — no terminal) ·
   `jobcut daily` (pull + score + surface in one — what the scheduler runs).
 
 Anything a skill needs to know about the data, it gets from a `--json` reader;
