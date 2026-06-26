@@ -108,6 +108,80 @@ def ingest_scores(path, conn=None, backend: str = "claude_skills") -> dict:
             conn.close()
 
 
+# --- salary estimates (B-15) ------------------------------------------------
+
+def _normalize_salary(entries: list[dict], today: str, source: str = "cowork_web") -> tuple[list[dict], list[str]]:
+    """Validate entries into SALARY_ESTIMATE_COLS rows; return (rows, errors). Lenient:
+    skip + report. Each needs a job_id and at least one numeric bound (est_min/est_max)."""
+    def _num(e: dict, key: str):
+        v = e.get(key)
+        if v in (None, ""):
+            return None
+        try:
+            return int(round(float(v)))
+        except (TypeError, ValueError):
+            return "ERR"
+
+    rows, errors = [], []
+    for i, e in enumerate(entries):
+        if not isinstance(e, dict):
+            errors.append(f"entry {i}: not an object")
+            continue
+        jid = str(e.get("job_id", "")).strip()
+        if not jid:
+            errors.append(f"entry {i}: missing job_id")
+            continue
+        emin, emax = _num(e, "est_min"), _num(e, "est_max")
+        if emin == "ERR" or emax == "ERR":
+            errors.append(f"entry {i} (job {jid}): est_min/est_max must be numeric")
+            continue
+        if emin is None and emax is None:
+            errors.append(f"entry {i} (job {jid}): needs est_min and/or est_max")
+            continue
+        if emin is not None and emax is not None and emin > emax:
+            emin, emax = emax, emin  # tolerate swapped bounds
+        cur = str(e.get("currency") or "").strip().upper() or None
+        rows.append({
+            "job_id": jid,
+            "est_min": emin,
+            "est_max": emax,
+            "currency": cur,
+            "period": str(e.get("period") or "year"),
+            "basis": str(e.get("basis", "") or "")[:_REASON_MAX],
+            "source": str(e.get("source") or source),
+            "estimated_at": str(e.get("estimated_at") or today),
+        })
+    return rows, errors
+
+
+def ingest_salary(path, conn=None, source: str = "cowork_web") -> dict:
+    """Read a salary-estimate JSON file and upsert it. Returns a summary dict.
+
+    Shape: a list of {job_id, est_min?, est_max?, currency?, period?, basis?} or
+    {"estimates": [...]}. Writes only to salary_estimates (never the disclosed
+    jobs.salary_*), tagged `source` (default cowork_web — ingest is the Cowork bridge).
+    """
+    own = conn is None
+    conn = conn or db.connect()
+    try:
+        today = datetime.date.today().isoformat()
+        data = json.loads(Path(path).read_text())
+        entries = data.get("estimates", []) if isinstance(data, dict) else data
+        if not isinstance(entries, list):
+            entries = []
+        rows, errors = _normalize_salary(entries, today, source)
+
+        known = {r["job_id"] for r in conn.execute("SELECT job_id FROM jobs").fetchall()}
+        unknown = sorted({r["job_id"] for r in rows if r["job_id"] not in known})
+
+        n = db.upsert_salary_estimates(conn, rows)
+        return {"ingested": n, "skipped": len(errors), "errors": errors,
+                "unknown_job_ids": unknown}
+    finally:
+        if own:
+            conn.close()
+
+
 # --- jobs (A4.1) ------------------------------------------------------------
 
 def load_jobs(data) -> list:

@@ -39,6 +39,7 @@ def get_job(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
     row = db.get_job_row(conn, job_id)
     srow = db.get_score_row(conn, job_id)
     application = db.get_application(conn, job_id)
+    estrow = db.get_salary_estimate_row(conn, job_id)
 
     # Never 404 a row the user owns: an imported application (or a score) with no
     # jobs row still opens with job:null so notes + status stay reachable (KR-v2-5).
@@ -59,4 +60,19 @@ def get_job(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
             "backend": None if surface.blank(s.get("backend")) else str(s["backend"]),
         }
 
-    return {"job": job, "score": score, "application": application}
+    salary_estimate = None
+    if estrow is not None:
+        e = dict(estrow)
+        def _int(v):
+            return int(v) if str(v).strip() not in ("", "None", "nan") else None
+        salary_estimate = {
+            "est_min": _int(e.get("est_min")),
+            "est_max": _int(e.get("est_max")),
+            "currency": None if surface.blank(e.get("currency")) else str(e["currency"]),
+            "period": None if surface.blank(e.get("period")) else str(e["period"]),
+            "basis": None if surface.blank(e.get("basis")) else str(e["basis"]),
+            "source": None if surface.blank(e.get("source")) else str(e["source"]),
+            "estimated_at": None if surface.blank(e.get("estimated_at")) else str(e["estimated_at"]),
+        }
+
+    return {"job": job, "score": score, "application": application, "salary_estimate": salary_estimate}

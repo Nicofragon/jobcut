@@ -17,6 +17,7 @@ import {
   type AppEvent,
   type JobDetail,
   type ProcessTiming,
+  type SalaryEstimate,
 } from "@/lib/api";
 import ScoreRing from "@/components/ScoreRing";
 import StatusSelect from "@/components/StatusSelect";
@@ -131,6 +132,22 @@ function salaryText(job: Record<string, string | null>): string | null {
   return parts.length ? parts.join(" – ") : null;
 }
 
+// B-15: a Cowork-estimated band, shown only when the employer disclosed none. Kept
+// visually distinct from a real band (a dashed "est." chip) so the two never blur.
+function fmtK(n: number | null): string | null {
+  if (n == null) return null;
+  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+}
+function estimateText(est: SalaryEstimate): string | null {
+  const lo = fmtK(est.est_min);
+  const hi = fmtK(est.est_max);
+  const range = lo && hi ? `${lo}–${hi}` : lo ?? hi;
+  if (!range) return null;
+  const cur = est.currency ? ` ${est.currency}` : "";
+  const per = est.period === "month" ? "/mo" : est.period === "hour" ? "/hr" : "/yr";
+  return `~${range}${cur}${per}`;
+}
+
 function JobDetailView() {
   const id = useSearchParams().get("id") ?? "";
   const [data, setData] = useState<JobDetail | null>(null);
@@ -177,6 +194,8 @@ function JobDetailView() {
     : null;
   const reasons = (score?.match_reasons ?? "").split(",").map((r) => r.trim()).filter(Boolean);
   const sal = job ? salaryText(job) : null;
+  // Show an estimate only when there's no disclosed band (never override a real one).
+  const est = !sal && data?.salary_estimate ? estimateText(data.salary_estimate) : null;
   const description = job?.description ?? null;
   const wp = job?.workplace_type
     ? job.workplace_type.replace(/_/g, "-").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -288,6 +307,11 @@ function JobDetailView() {
               {job?.location && <Chip icon="map-pin">{job.location}</Chip>}
               {wp && <Chip icon="briefcase" tone="primary">{wp}</Chip>}
               {sal && <Chip icon="banknote">{sal}</Chip>}
+              {est && (
+                <Chip icon="banknote" estimated title={data?.salary_estimate?.basis ?? "Estimated, not disclosed by the employer"}>
+                  {est} · est.
+                </Chip>
+              )}
             </div>
           )}
         </div>
@@ -678,18 +702,26 @@ function JobDetailView() {
 function Chip({
   icon,
   tone = "default",
+  estimated = false,
+  title,
   children,
 }: {
   icon: "map-pin" | "briefcase" | "banknote";
   tone?: "default" | "primary";
+  estimated?: boolean; // dashed outline → "estimated, not a disclosed band"
+  title?: string;
   children: React.ReactNode;
 }) {
-  const cls =
-    tone === "primary"
+  const cls = estimated
+    ? "border border-dashed border-border bg-transparent text-on-surface-faint"
+    : tone === "primary"
       ? "bg-primary-tint text-primary-strong"
       : "bg-surface-sunken text-on-surface-variant";
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${cls}`}>
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${cls}`}
+    >
       <Icon name={icon} size={16} /> {children}
     </span>
   );

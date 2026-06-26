@@ -156,6 +156,7 @@ list are in [`integrations/cowork/`](integrations/cowork/README.md).
 | "add this job &lt;url&gt; / I applied to this Lever role" | `jobcut-add` |
 | "open jobcut / abrí jobcut" | `jobcut-open` |
 | "what's the market asking for?" | `jobcut-market` |
+| "estimate salaries for these roles" | `jobcut-salary` |
 | "update jobcut / I still see the old design" | `jobcut-update` |
 
 ## Cost & safety

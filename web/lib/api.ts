@@ -64,6 +64,16 @@ export type ApplicationFields = Partial<
   Pick<Application, "priority" | "next_action" | "next_action_date" | "contact" | "cv_version">
 >;
 
+export type SalaryEstimate = {
+  est_min: number | null;
+  est_max: number | null;
+  currency: string | null;
+  period: string | null; // 'year' | 'month' | 'hour'
+  basis: string | null; // human-readable rationale / source
+  source: string | null;
+  estimated_at: string | null;
+};
+
 export type JobDetail = {
   job: Record<string, string | null> | null; // null for application-only rows (no jobs row)
   score: {
@@ -74,6 +84,8 @@ export type JobDetail = {
     backend: string | null;
   } | null;
   application: Application | null;
+  // B-15: a Cowork-estimated band when the employer didn't disclose one. null otherwise.
+  salary_estimate: SalaryEstimate | null;
 };
 
 export type Funnel = {

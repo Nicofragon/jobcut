@@ -102,7 +102,19 @@ def test_job_detail(client):
     assert body["score"]["match_score"] >= 60
     assert body["score"]["backend"] == "rule_based"   # score.run tags the effective backend
     assert body["application"] is None
+    assert body["salary_estimate"] is None            # none until estimated (B-15)
     assert client.get("/api/jobs/999").status_code == 404
+
+
+def test_job_detail_includes_salary_estimate(client):
+    conn = db.connect()
+    db.upsert_salary_estimates(conn, [{"job_id": "2", "est_min": 50000, "est_max": 70000,
+                                       "currency": "EUR", "period": "year", "basis": "Levels.fyi"}])
+    conn.close()
+    est = client.get("/api/jobs/2").json()["salary_estimate"]
+    assert est is not None
+    assert est["est_min"] == 50000 and est["est_max"] == 70000
+    assert est["currency"] == "EUR" and est["basis"] == "Levels.fyi"
 
 
 def test_job_detail_application_only(client):
