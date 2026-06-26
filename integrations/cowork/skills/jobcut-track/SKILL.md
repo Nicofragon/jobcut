@@ -25,6 +25,15 @@ schema authority: context comes from `jobcut surface --json` / `jobcut stats --j
 and the write goes through `jobcut ingest-events`. This keeps the DB valid and is
 just as direct.
 
+**A note is not a match reason.** Everything the user *tells you happened* — a
+rejection, a recruiter call, a reminder — is a **note** (or a status / field / round)
+and belongs here, via `ingest-events`. It is **never** written into
+`scores.match_reasons`: that field is the *scoring rationale* (why the job scored what
+it did) and is owned only by `jobcut-score`. A note put there won't show in "Notes &
+activity" and corrupts the score's "why" line. When in doubt: did the user tell you
+something that happened? → note here. Are you explaining a score? → that's
+`jobcut-score`, not this skill.
+
 ## Preconditions
 
 - `jobcut` is installed and on PATH (`jobcut --help` works).

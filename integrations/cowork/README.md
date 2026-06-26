@@ -17,6 +17,7 @@ directly.** Every write goes through the CLI, which is the single schema authori
 
 | Say this | Skill | What happens |
 |----------|-------|--------------|
+| "let's work on my job search" / "is jobcut set up?" / "what can you do with my jobs?" | [`jobcut`](skills/jobcut/SKILL.md) | **Front door.** Confirms the jobcut skills are loaded + the CLI/data dir resolve, says what's missing if not, then routes you to the right skill |
 | "run my daily job search" / "pull and score new jobs" | [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | Pull saved searches (local Apify client) → score → shortlist |
 | "score my jobs with Claude" / "re-score these" | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Claude scores jobs against your profile and writes them straight to the DB |
 | "what should I apply to?" / "top 10" / "how's my pipeline this week?" / "open the console" | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** Top picks to apply, pipeline/weekly stats, or launch the web console |
@@ -26,9 +27,12 @@ directly.** Every write goes through the CLI, which is the single schema authori
 | "what's the market asking for?" / "my skill gaps" | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile |
 | "update jobcut" / "I still see the old design" | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull latest code, reinstall if deps changed, rebuild + restart the console |
 
-A normal day: **jobcut-daily** (fetch + score) → **jobcut-review** (decide what to
-apply to / open the console). **jobcut-update** keeps the install current;
-**jobcut-market** and **jobcut-score** are on-demand.
+Starting a session, just say "let's work on jobcut" — the **jobcut** front door
+checks that every skill is loaded and the CLI/data dir resolve (and tells you what to
+fix if not), so Claude never silently improvises around a missing skill. A normal day
+from there: **jobcut-daily** (fetch + score) → **jobcut-review** (decide what to apply
+to / open the console). **jobcut-update** keeps the install current; **jobcut-market**
+and **jobcut-score** are on-demand.
 
 ## The CLI is the database contract
 
@@ -76,5 +80,6 @@ always free — they never scrape.)
 
 Full step-by-step in [`SETUP.md`](SETUP.md). In short: install jobcut, set
 `JOBCUT_DATA_DIR`, run `jobcut init`, add the Apify token (or do it in the onboarding
-UI), copy the skills into your Claude skills directory, and choose your run owner
-(in-app scheduler by default).
+UI), install the skills with `bash integrations/cowork/install.sh` (into the directory
+your Claude tool reads — see SETUP.md; Cowork's differs from Claude Code's), and choose
+your run owner (in-app scheduler by default).

@@ -147,6 +147,7 @@ list are in [`integrations/cowork/`](integrations/cowork/README.md).
 
 | Ask Claude… | Skill |
 |-------------|-------|
+| "let's work on my job search / is jobcut ready?" | `jobcut` (front door) |
 | "run my daily job search" | `jobcut-daily` |
 | "score my jobs with Claude" | `jobcut-score` |
 | "what should I apply to? / how's my pipeline?" | `jobcut-review` |
