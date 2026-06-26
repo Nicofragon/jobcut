@@ -198,7 +198,7 @@ hace el score — ambos con progreso en vivo (SSE).
 
 ## 7. El modelo de datos (SQLite)
 
-Cuatro tablas (`schema_version = 2`):
+Tablas (`schema_version = 6`):
 
 **`jobs`** — el acumulador madre, 1 fila por `job_id` (PK). ~32 columnas que reflejan el
 payload aplanado: `title, company_name, location, workplace_type, applicants,
@@ -210,11 +210,23 @@ resto es estable. **Nunca se borra.**
 `canonical_id, match_score, match_reasons, status` (`scored` | `discarded`),
 `scored_date`.
 
+**`score_runs`** — runs de calibración multi-backend (`jobcut score --compare`):
+varias filas por `job_id` (una por backend), **sin tocar** la tabla `scores`.
+
 **`applications`** — **verdad escrita por vos** (el funnel), separada de `scores` para
 que un re-score nunca la pise. PK `job_id` (sin FK → admite entradas manuales):
 `status, status_category, applied_at` (se fija una vez), `updated_at` (se refresca),
-`notes, source` (`manual` | `import` | futuro `email`). Toda escritura pasa por un único
-punto (`db.set_application_status`), que deja sitio a una `status_history` futura.
+`notes, source` (`manual` | `import` | …). Además, columnas estructuradas de
+seguimiento: `priority, next_action, next_action_date, contact, cv_version`, y para el
+proceso de entrevistas `process_stages` (JSON con las etapas nombradas) +
+`process_current` (entero: en qué etapa estás). Toda escritura de status pasa por un
+único punto (`db.set_application_status`).
+
+**`application_events`** — timeline **append-only** (1 fila por evento) de cada
+aplicación: `kind ∈ status_change | note | interview | next_action`, con `body`, `meta`
+y fecha. Es la fuente del historial ("notes & activity") y del funnel acumulado
+("¿alguna vez llegó a entrevista?"). `jobcut backfill-events` siembra el
+`status_change` inicial para apps importadas antes del timeline.
 
 **`_meta`** — `schema_version`. Las migraciones son aditivas y version-gated (idempotentes).
 
@@ -247,9 +259,13 @@ De ahí se **genera** (no-destructivo: no pisa archivos existentes salvo que fue
 | `scoring.signals` | nice-to-have skills | el score (bonus) |
 | `scoring.dealbreakers` | sección Dealbreakers (best-effort, revisá) | el score (penalización) |
 
-Desde el console: **Settings → Profile** edita `profile.md`, "Regenerate" genera los
-artefactos, y un re-score aplica la nueva rúbrica. (Endpoints: `GET /api/profile/derived`
-previsualiza; `POST /api/profile/derive` escribe.)
+Desde el console: **Settings → Profile** edita el perfil, "Regenerate" genera los
+artefactos, y un re-score aplica la nueva rúbrica. El editor es un **formulario
+estructurado** (sin markdown a la vista): los campos del perfil van por
+`GET/PUT /api/profile/structured` (sobre los mismos headings), `profile.md` crudo sigue
+disponible en `GET/PUT /api/profile`. Las búsquedas también se editan como formulario
+amigable vía `GET …/searches/structured` + el CRUD `/searches/structured`. (Derivados:
+`GET /api/profile/derived` previsualiza; `POST /api/profile/derive` escribe.)
 
 **CV → perfil (capa IA opcional):** subís un CV (`txt/md` siempre; `pdf/docx` con el
 extra `[cv]`); si hay una key LLM, la IA arma un borrador de `profile.md` con los headings;
@@ -260,8 +276,9 @@ solo** — revisás y confirmás.
 
 ## 9. El scoring (rúbrica)
 
-**Pluggable** vía la interfaz `Scorer`. Backend por defecto: `rule_based` (Python puro,
-sin key, sin coste, transparente). Se elige en `config.scoring.backend`.
+**Pluggable** vía la interfaz `Scorer`. Hay **cuatro backends**, elegibles en
+`config.scoring.backend`; si el elegido no está disponible, cae a `rule_based` (el piso).
+Backend por defecto: `rule_based` (Python puro, sin key, sin coste, transparente).
 
 ### `rule_based` — componentes y pesos (editables en `config.json`)
 
@@ -279,39 +296,58 @@ sin key, sin coste, transparente). Se elige en `config.scoring.backend`.
 Todo lo de arriba (títulos, skills, signals, dealbreakers, geografía) **viene de tu
 perfil** — no hay listas de roles hardcodeadas. Cada score trae una razón de una línea.
 
-### Tiers opcionales
+### Los otros backends
 
-- **`llm_api`** — puntúa con un LLM (tu key, vía el extra `[llm]`); pide JSON
-  `{score, reason}`. Mejor calidad, coste por oferta. Sin key configurada falla con un
-  mensaje claro (no rompe el default).
-- **`claude_skills`** — adapter para usuarios de Claude (stub; pendiente).
+- **`local`** — puntúa contra un servidor **Ollama / LM Studio** en localhost
+  (`JOBCUT_OLLAMA_URL`, default `http://localhost:11434`). Gratis, privado, sin key. Si
+  no responde, cae a `rule_based`.
+- **`llm_api`** — puntúa con un LLM (tu key, vía el extra `[llm]`, Anthropic/OpenAI); pide
+  JSON `{score, reason}`. Mejor calidad, coste por oferta. Sin key configurada cae al
+  default.
+- **`claude_skills`** — los scores los escribe una **skill de Claude Code / Cowork**
+  (`jobcut-score`) y se cargan con `jobcut ingest-scores` (etiquetados
+  `backend=claude_skills`). No es un scorer del pipeline en vivo: el juicio ocurre en
+  Claude y se ingiere a la tabla `scores`.
+
+> **Calibración:** `jobcut score --compare` puntúa con cada backend usable en `score_runs`
+> (sin tocar `scores`) y `jobcut compare` imprime la tabla de acuerdo + CSV/xlsx en `out/`.
 
 ---
 
 ## 10. El console web, sección por sección
 
-Paleta GitHub-dark. Navegación: **Today · Applications · Searches · Discovery · Settings**
-(+ Onboarding y Detalle).
+Paleta GitHub-dark, rediseñado. Navegación: **Today · Applications · Searches · Discovery ·
+Settings** (+ Onboarding y Detalle). Las pantallas de Onboarding / Searches / Profile /
+Settings son **formularios estructurados amigables** — sin markdown ni JSON a la vista.
 
 - **Onboarding** (`/onboarding`) — wizard de primer arranque: (1) credenciales (validar
-  Apify gratis + guardar), (2) perfil (subir CV → borrador, o escribir), (3) generar
-  búsquedas/rúbrica derivadas, (4) backend de scoring, (5) primer pull. Idempotente, con
-  "Skip". El Home redirige acá en el primer arranque (sin token y sin jobs).
-- **Today** (`/`) — la shortlist del día rankeada. Filtros (score mínimo, búsqueda con
-  debounce). Cada `JobCard`: score, razón, link a la oferta y cambio rápido de status.
-  Secciones "New today" + "Backlog". Botones **Re-score** (gratis) y **Run scraper**
-  (modal de coste → progreso SSE).
-- **Detalle** (`/job?id=…`) — descripción completa, **desglose del score** (chips de
-  razones), datos de empresa, control de status, notas, link para aplicar.
-- **Applications** (`/applications`) — el **funnel**: KPIs (applied / in-process /
-  interview / offers), barras, y tabla editable (cambiar status inline, borrar).
-- **Searches** (`/searches`) — CRUD de búsquedas (JSON editable por archivo), crear/borrar,
-  y "Run scraper" (con aviso de coste). Recordá poner el `geoId` real.
+  Apify gratis + guardar), (2) perfil (subir CV → borrador, o completar el formulario),
+  (3) generar búsquedas/rúbrica derivadas, (4) backend de scoring, (5) primer pull.
+  Idempotente, con "Skip". El Home redirige acá en el primer arranque (sin token y sin
+  jobs).
+- **Today** (`/`) — el "hero loop": la shortlist del día rankeada. Filtros (score mínimo,
+  búsqueda con debounce). Cada card: score, razón, link a la oferta y cambio rápido de
+  status. Secciones "New today" + "Backlog". Botones **Re-score** (gratis) y **Run
+  scraper** (modal de coste → progreso SSE).
+- **Detalle** (`/job?id=…`) — descripción completa, **anillo de score** + "why it matches"
+  (chips de razones), datos de empresa, **status stepper**, y una **Interview process
+  card**: etapas nombradas + posición ("etapa 3/4"), avanzar etapa (con fecha opcional),
+  timing por aplicación ("Process: N días · avg gap N días"), y **"Suggest from posting"**
+  (propone etapas leyendo el aviso). Debajo, un **timeline de notas y actividad**.
+- **Applications** (`/applications`) — el centro de seguimiento: **KPI cards**, actividad
+  semanal, **Pipeline** (funnel que muestra el alcance **acumulado** — "alguna vez llegó a
+  X" — con un tenue "N active" por etapa), **Interview funnel** (conversión por ronda),
+  **Needs attention** (apps estancadas; se **oculta cuando no hay nada accionable**), y una
+  **lista plana ordenable** (orden por defecto "Active first") con selector de status
+  inline + ícono de estado y un formulario **"+ Add application"** para cargar un rol a
+  mano.
+- **Searches** (`/searches`) — CRUD de búsquedas como formulario amigable (con pausar),
+  crear/borrar, y "Run scraper" (con aviso de coste). Recordá poner el `geoId` real.
 - **Discovery** (`/discovery`) — market gaps: demanda de skills vs tu perfil
   (have/partial/gap), gaps priorizados, mix de segmentos.
 - **Settings** (`/settings`) — credenciales (validar/guardar), backend de scoring, data
   dir + estado de la DB, **export** CSV/JSON, y link a editar el Perfil.
-- **Profile** (`/profile`) — editor de `profile.md`, regenerar searches/rúbrica
+- **Profile** (`/profile`) — editor estructurado del perfil, regenerar searches/rúbrica
   (no-destructivo), y editor de **pesos** de scoring.
 
 ---
@@ -344,12 +380,22 @@ de "run" con **SSE**; el resto es síncrono.
 | POST | `/validate-credentials` | Valida Apify **gratis** (`user().get()`, no dispara actor). |
 | GET | `/shortlist` | Shortlist `{today, backlog, meta}`. Query: `min_score, backlog_min, q, location, recency_days, include_applied`. |
 | GET | `/jobs/{id}` | Oferta completa + score + estado de aplicación. |
-| GET | `/applications` | Todas las aplicaciones (el funnel). |
-| GET | `/applications/funnel` | KPIs + funnel + por-categoría + por-semana. |
+| GET | `/applications` | Todas las aplicaciones (enriquecidas con título/empresa + flags `days_in_stage`/`stalled`/`dormant`). |
+| POST | `/applications/manual` | Crea una oferta a mano (`source='manual'`) y enlaza una aplicación (el form "+ Add application"). |
+| GET | `/applications/funnel` | KPIs + funnel + por-categoría + por-semana + `reached` (alcance acumulado por etapa). |
 | GET | `/applications/statuses` | Vocabulario canónico de status + categorías. |
-| GET/PUT/DELETE | `/applications/{id}` | Leer / set status (upsert) / borrar. |
-| GET | `/searches` · GET/POST/PUT/DELETE `/searches/{name}` | CRUD de búsquedas (nombre validado). |
-| GET/PUT | `/profile` | Lee / escribe `profile.md`. |
+| GET | `/applications/interview-funnel` | Funnel de conversión por ronda de entrevista. |
+| GET | `/applications/process-timing` | Timing agregado del proceso de entrevistas. |
+| GET/PUT/PATCH/DELETE | `/applications/{id}` | Leer / set status (upsert) / PATCH de campos estructurados (priority, next_action…) / borrar. |
+| GET/POST | `/applications/{id}/events` | Timeline (status/notas/rondas) / append de un evento (`kind` ∈ note\|interview\|next_action). |
+| PUT | `/applications/{id}/process` | Define las etapas nombradas del proceso + posición actual. |
+| POST | `/applications/{id}/process/suggest` | Propone etapas leyendo el aviso (usa LLM si hay key). |
+| POST | `/applications/{id}/process/advance` | Avanza a la siguiente etapa (fecha opcional). |
+| GET | `/applications/{id}/process/timing` | Timing por aplicación (días por etapa; `null` si <2 rondas). |
+| GET | `/scoring/backends` | Lista los backends de scoring con flags de disponibilidad/usabilidad. |
+| GET | `/searches` · `/searches/structured` (CRUD) | Búsquedas: por archivo (`/{name}`) o como formulario estructurado (`/structured`, con `paused`). |
+| GET/PUT | `/profile` | Lee / escribe `profile.md` (crudo). |
+| GET/PUT | `/profile/structured` | Lee / escribe el perfil como campos (formulario amigable). |
 | GET | `/profile/derived` | Previsualiza searches/config/taxonomy derivados. |
 | POST | `/profile/derive` | Escribe los derivados (no-destructivo salvo `force`). |
 | POST | `/profile/from-cv` | Borrador de `profile.md` desde texto de CV (IA o scaffold). |
@@ -360,6 +406,7 @@ de "run" con **SSE**; el resto es síncrono.
 | POST | `/runs` | Inicia un run `{kind: "pull"\|"score", mode, confirm}`. |
 | GET | `/runs/{id}` | Estado del run. |
 | GET | `/runs/{id}/events` | **SSE** del progreso (`stage`, `message`, `done`). |
+| GET/PUT/DELETE | `/schedule` | Lee / escribe / borra el schedule diario del sistema. |
 
 **Guard de coste (regla dura):** `kind:"pull"` + `mode:"trigger"` (Apify de pago)
 **exige `confirm:true`**; si no → `409 confirmation_required`. `mode:"read"` y `score`
@@ -373,10 +420,31 @@ no requieren confirmación. Docs interactivas: `http://<host>:<port>/docs`.
 jobcut init [--no-input]    # scaffolding del data dir (idempotente)
 jobcut pull [--read]        # pull de Apify (sin flag = PAGO; --read = re-descarga gratis)
 jobcut score                # filtra el funnel + scorea contra el perfil
-jobcut surface              # escribe out/shortlist.md + .csv
-jobcut market               # escribe out/market-gaps.md + dashboard + history
+jobcut score --compare [--backends a,b] [--limit N]   # calibración multi-backend → score_runs
+jobcut compare [--json]     # tabla de acuerdo entre backends + CSV/xlsx en out/
+jobcut surface [--json]     # escribe out/shortlist.md + .csv (o JSON a stdout)
+jobcut market [--json]      # escribe out/market-gaps.md + dashboard + history
+jobcut stats                # KPIs del funnel como JSON (read-only)
+jobcut unscored [--json]    # lista jobs contratables sin score (para un scorer externo)
+jobcut daily [--read] [--every N]   # pull + score + surface (lo que corre el scheduler)
 jobcut export               # vuelca la DB a CSV/JSON en out/
-jobcut serve [--host H] [--port P] [--open]   # API + console en un proceso
+
+# Entrada manual y escritura por agente (Claude/Cowork)
+jobcut add-job [--url U | --company C --title T] [--location L] [--apply [STATUS]] [--job-id ID]
+                            # agrega una oferta a mano (source=manual; opcional enlaza aplicación)
+jobcut ingest-scores FILE.json [--backend NAME]   # upsert de scores (default backend=claude_skills)
+jobcut ingest-events FILE.json    # aplica write-ops a aplicaciones (notas, rondas, status, campos)
+jobcut import-jobs FILE.json      # upsert de filas de jobs scrapeadas (sin scrape)
+
+# Mantenimiento del timeline / funnel
+jobcut backfill-events      # siembra el status_change inicial para apps previas al timeline
+jobcut age-applications     # envejece Applied silencioso (≥30d sin respuesta) → No response
+
+# Servir / abrir sin terminal
+jobcut serve [--host H] [--port P] [--open] [--replace] [--no-build]
+                            # API + console en un proceso. --open abre el navegador;
+                            # --replace toma el puerto si está ocupado; --no-build no recompila
+jobcut shortcut [--path P] [--port N]   # genera un launcher de escritorio (doble click, sin terminal)
 jobcut dashboard            # Streamlit "lite" (extra [dashboard])
 ```
 
@@ -417,7 +485,7 @@ console Next.js es el frontend principal.
   "routing": { "home": "<regex>", "region": "<regex>" },   // geografía contratable
   "filter":  { "include_titles": "<regex>" },              // títulos que valen scorear
   "scoring": {
-    "backend": "rule_based",                                // rule_based | llm_api | claude_skills
+    "backend": "rule_based",                                // rule_based | local | llm_api | claude_skills
     "weights": { "title":30,"stack":20,"location":15,"signals":10,
                  "employer":10,"reachable":10,"dealbreaker":-20 },
     "signals": [],            // patrones bonus (derivados de nice-to-have)
@@ -439,7 +507,8 @@ base de la API en el front).
 | Síntoma | Causa / solución |
 |---|---|
 | Console dice "API offline" | La API no corre. `uvicorn jobcut.api.app:app --port 8000` o `jobcut serve`. |
-| `serve` dice "no build found (web/out)" | Construí el console: `cd web && npm install && npm run build`. (O usá `npm run dev` en :3000.) |
+| `serve` dice "no build found (web/out)" | `serve` autoconstruye el console si hay Node 20.9+; si falta Node o falla, construilo: `cd web && npm install && npm run build` (o `npm run dev` en :3000). |
+| `serve` dice "Port … already in use" | Suele ser un `serve` viejo. `jobcut serve --replace` toma el puerto, o `jobcut serve --port 8001`. |
 | "Today" vacío pero hay jobs | Las ofertas se scorearon otro día → están en "Backlog". Bajá el score mínimo, o re-scoreá. |
 | `pull --read` falla | No hay run previo (`last_runs.json`). Corré `jobcut pull` (pago) una vez. |
 | Búsqueda generada no trae nada | El `geoId` quedó en `REPLACE_ME`. Editá `searches/*.json` con tu geoId real de LinkedIn. |

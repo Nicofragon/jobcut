@@ -29,13 +29,13 @@ file). CSV/JSON/Markdown outputs are **exports**, never the source of truth.
 
 ```
                           ┌──────────── jobcut.db (SQLite) ────────────┐
-                          │   jobs table   ·   scores table              │
+                          │  jobs · scores · applications · events       │
                           └──────────────────────────────────────────────┘
    Apify          ▲ write       ▲ write/read     ▲ read          ▲ read
  (LinkedIn)  ─▶  PULL  ─▶ STORE ─▶ ROUTE+FILTER ─▶ SCORE ─▶ SURFACE / MARKET / EXPORT ─▶ out/
                                                                             │
                                                                             ▼
-                                          DASHBOARD (Streamlit)  +  application TRACKER (your CSV/xlsx)
+                                  WEB CONSOLE (Next.js)  ·  DASHBOARD (Streamlit)  ·  application tracking (applications table)
 ```
 
 ### Where everything lives — the data dir
@@ -53,7 +53,7 @@ installed code.
 │   ├── config.json      # geography, title filter, scoring weights
 │   └── taxonomy.json    # skills (regex + have/partial/gap) for the market report
 ├── searches/*.json      # one file per saved LinkedIn search
-├── jobcut.db          # the canonical SQLite store (jobs + scores)
+├── jobcut.db          # the canonical SQLite store (jobs, scores, applications, events)
 └── out/                 # generated outputs (shortlist, market report, exports)
 ```
 
@@ -127,7 +127,8 @@ jobcut score
 ```
 
 Scoring is **pluggable** — a `Scorer` interface ([scoring/base.py](../src/jobcut/scoring/base.py))
-with three backends selected by `config.json → scoring.backend`:
+with four backends selected by `config.json → scoring.backend` (anything not
+usable falls back to `rule_based`, the floor):
 
 - **`rule_based`** (default · [rule_based.py](../src/jobcut/scoring/rule_based.py))
   — pure Python, no API key, no cost. A transparent rubric you tune in
@@ -137,10 +138,20 @@ with three backends selected by `config.json → scoring.backend`:
   +30  title matches a target role        +10  reasonable employer (some size)
   +20  stack keywords present             +10  reachable (<50 applicants or a recruiter)
   +15  workable location                  −20  a hard requirement you don't meet
-  +10  AI signals (LLM / GenAI / RAG)     out-of-profile titles capped low
+  +10  profile signals (nice-to-have)     out-of-profile titles capped low
   ```
-- **`llm_api`** — optional OpenAI/Anthropic hook (bring your own key). *Phase 2.*
-- **`claude_skills`** — optional adapter for Claude users. *Phase 2.*
+- **`local`** ([local.py](../src/jobcut/scoring/local.py)) — scores on a local
+  Ollama / LM Studio server (`JOBCUT_OLLAMA_URL`, default `localhost:11434`).
+  Free, private, no key.
+- **`llm_api`** ([llm_api.py](../src/jobcut/scoring/llm_api.py)) — OpenAI/Anthropic
+  hook (bring your own key, via the `[llm]` extra). Higher quality, per-job cost.
+- **`claude_skills`** — scores written by a Claude Code / Cowork skill and loaded
+  via `jobcut ingest-scores` (not a live-pipeline scorer; the score is judged in
+  Claude and ingested into the `scores` table tagged `backend=claude_skills`).
+
+You can also calibrate backends side-by-side without touching the live `scores`
+table: `jobcut score --compare` writes to `score_runs` and `jobcut compare`
+prints the agreement table (+ CSV/xlsx in `out/`).
 
 Each scored job gets a **0–100 score + a one-line reason**. Then the orchestrator:
 
@@ -192,22 +203,55 @@ score buckets) for the dashboard, a spreadsheet, or GitHub Pages.
 
 ## 4. Tracking the roles you apply to
 
-jobcut **finds and ranks**; *you* decide and apply. When you apply, you log it in
-a hand-edited file (CSV or xlsx) — for example with columns
-`Company, Role Title, Tier, LinkedIn URL, Status, Date Applied`. Point jobcut at
-it with **`$JOBCUT_TRACKER`**.
+jobcut **finds and ranks**; *you* decide and apply. When you apply, you mark the
+status — and from then on the role lives in the **`applications`** table in
+`jobcut.db` (not a hand-edited file). This is human-written truth, kept separate
+from `scores` so a re-score never overwrites it.
 
-That tracker does two things:
+The status vocabulary is a controlled set:
+`saved → applied → screen → interview → offer` (plus `rejected`, `withdrawn`,
+`no_response`). The funnel derives a category from each status.
 
-1. **Feeds the shortlist's exclusion** — surface drops roles already in it, so you
-   never re-triage something you've applied to.
-2. **Powers the dashboard's Funnel tab** — [tracker.py](../src/jobcut/tracker.py)
-   reads it live and classifies each free-text `Status` into a funnel:
-   `Applied → Reviewing → Screen → Interview → Offer` (plus `Rejected`,
-   `Withdrawn`, `No response`).
+What the tracker gives you:
 
-> It's intentionally manual in v1: SQLite is awkward to edit by hand, and
-> application status is a human judgment. The tracker stays a file you own.
+1. **Excludes applied roles from the shortlist** — surface drops anything you've
+   applied to, so you never re-triage it.
+2. **A funnel + KPIs** — applied / screen / interview / offer counts, plus a
+   **cumulative "ever reached"** view (a role rejected after an interview still
+   counts toward "reached interview").
+3. **An append-only timeline** (`application_events`) — every status change, note,
+   interview round, and next-action is a row, most-recent-first.
+4. **Interview-process tracking** — per application you can record named stages
+   (e.g. *Recruiter call · Technical · System design · Onsite*) and the current
+   position ("stage 3/4"). `advance` moves to the next stage (optionally dated),
+   and timing surfaces *"Process: N days · avg gap N days"* per app plus an
+   aggregate. `POST /applications/{id}/process/suggest` reads the posting and
+   proposes stages on demand (uses an LLM if one is configured).
+
+### Three ways to write a status / event
+
+- **The console** — mark status inline on the list, or open a role's detail page
+  for the status stepper, the interview-process card, and the notes timeline.
+- **The CLI / a Claude skill** — `jobcut ingest-events <file.json>` applies a batch
+  of write-ops (status changes, notes, interview rounds, structured fields). The
+  `jobcut-track` Cowork skill wraps this so you can update an application by
+  chatting ("Acme passed to round 3, scheduled the 30th") with no manual JSON.
+- **Aging** — `jobcut age-applications` (also run automatically on `serve`) ages a
+  silent `applied` role with no movement for 30 days to `no_response`, so the
+  funnel stays honest.
+
+### Adding a role the scraper never found
+
+Some roles come from outside LinkedIn. Add one manually and it goes into the same
+tables (`source = 'manual'`, a stable `job_id` derived from its URL or
+company+title; excluded from the scored shortlist since it's unscored):
+
+```bash
+jobcut add-job --url <posting-url> --company "Acme" --title "Data Analyst" --apply
+```
+
+The console's **"+ Add application"** form (`POST /applications/manual`) and the
+`jobcut-add` Cowork skill ("add this job: <url>") do the same thing.
 
 ---
 
@@ -219,9 +263,10 @@ jobcut dashboard          # needs: pip install -e '.[dashboard]'
 
 A dark, GitHub-style Streamlit app with three tabs:
 
-- **Funnel** — your application funnel from the tracker (KPIs, conversion bars,
-  next actions, status + weekly charts, a searchable/filterable table). Reads
-  `$JOBCUT_TRACKER` live; if it's unset, the tab explains how to enable it.
+- **Funnel** — your application funnel from the `applications` table (KPIs,
+  conversion bars, next actions, status + weekly charts, a searchable/filterable
+  table) with an inline status toggle. The Next.js console (§ the web console) is
+  the richer frontend; the Streamlit dashboard is the no-Node fallback.
 - **Discovery** — jobcut's scored shortlist from `jobcut.db` (KPIs, score
   distribution, the ranked table with score badges + a min-score slider).
 - **Market gaps** — the `market-gaps.md` report.

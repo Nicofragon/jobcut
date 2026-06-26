@@ -13,8 +13,9 @@ which skills are in demand, where, and how that shifts over weeks.
 
 > ⚠️ **Status: pre-release.** The pipeline works end to end and ships a local
 > **web console** (Next.js) over a thin **FastAPI** bridge — onboarding, a daily
-> shortlist, an application funnel, searches, profile and market gaps — launched with
-> a single `jobcut serve`. Not yet on PyPI; install from this repo with `pip install -e .`.
+> shortlist, an application tracker (status, interview rounds/stages, a pipeline funnel),
+> searches, profile and market gaps — launched with a single `jobcut serve`. Not yet on
+> PyPI; install from this repo with `pip install -e .`.
 
 ---
 
@@ -32,7 +33,9 @@ which skills are in demand, where, and how that shifts over weeks.
 - **Role-agnostic & profile-driven.** Searches and the scoring rubric are *derived from
   your `profile.md`* — nothing is hardcoded to any field (works for a nurse or a data analyst).
 - **Pluggable scoring** via a `Scorer` interface: `rule_based` (the **default** — pure
-  Python, no key, no cost), plus optional `llm_api` / `claude_skills` tiers.
+  Python, no key, no cost), plus optional `local` (Ollama / LM Studio, free), `llm_api`
+  (bring your own key), and `claude_skills` (Claude scores via the CLI) tiers — pick one in
+  Settings; everything falls back to `rule_based`.
 - **100% local.** Your data and secrets never leave the machine — except the scraper call
   to Apify (which is only ever triggered with explicit confirmation).
 
@@ -71,7 +74,8 @@ through everything — no files to edit by hand:
 4. **Scoring** — pick a scoring backend (the free `rule_based` one is the default).
 5. **First run** — click **Find new jobs** to run your first scrape (~$0.04–0.18 via Apify) and watch the shortlist fill in.
 
-Already set up? Re-open the console any time with `./jobcut serve --open`.
+Already set up? Re-open the console any time with `./jobcut serve --open` — or run
+`./jobcut shortcut` once to drop a double-click launcher on your Desktop (no terminal).
 
 > The console build happens once during `setup.sh` (needs Node 20.9+). Without Node
 > you still get the full CLI — see below.
@@ -136,15 +140,19 @@ All of the above — `include_titles`, skill patterns, `signals`, `dealbreakers`
 
 jobcut ships skills so Claude (Cowork / Claude Code) can drive it for you — through
 the `jobcut` CLI, never raw SQL. Ask Claude to **run your daily search**, **score
-jobs**, tell you **what to apply to / how your pipeline is doing**, **summarize the
-market**, or **update the app**. Setup and the full skill list are in
-[`integrations/cowork/`](integrations/cowork/README.md).
+jobs**, tell you **what to apply to / how your pipeline is doing**, **update an
+application** (notes, interview rounds, status), **add a job from a URL**, **open the
+console**, **summarize the market**, or **update the app**. Setup and the full skill
+list are in [`integrations/cowork/`](integrations/cowork/README.md).
 
 | Ask Claude… | Skill |
 |-------------|-------|
 | "run my daily job search" | `jobcut-daily` |
 | "score my jobs with Claude" | `jobcut-score` |
 | "what should I apply to? / how's my pipeline?" | `jobcut-review` |
+| "Preply passed to R3 / add a note to Kiwi / mark Acme rejected" | `jobcut-track` |
+| "add this job &lt;url&gt; / I applied to this Lever role" | `jobcut-add` |
+| "open jobcut / abrí jobcut" | `jobcut-open` |
 | "what's the market asking for?" | `jobcut-market` |
 | "update jobcut / I still see the old design" | `jobcut-update` |
 
