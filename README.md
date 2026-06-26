@@ -75,7 +75,8 @@ through everything — no files to edit by hand:
 5. **First run** — click **Find new jobs** to run your first scrape (~$0.04–0.18 via Apify) and watch the shortlist fill in.
 
 Already set up? Re-open the console any time with `./jobcut serve --open` — or run
-`./jobcut shortcut` once to drop a double-click launcher on your Desktop (no terminal).
+`./jobcut shortcut` once to drop a **jobcut app icon** on your Desktop — double-click to
+open, no terminal (a real `.app` on macOS, `.desktop` on Linux, `.lnk` on Windows).
 
 > The console build happens once during `setup.sh` (needs Node 20.9+). Without Node
 > you still get the full CLI — see below.

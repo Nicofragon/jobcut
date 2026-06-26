@@ -444,7 +444,7 @@ jobcut age-applications     # envejece Applied silencioso (≥30d sin respuesta)
 jobcut serve [--host H] [--port P] [--open] [--replace] [--no-build]
                             # API + console en un proceso. --open abre el navegador;
                             # --replace toma el puerto si está ocupado; --no-build no recompila
-jobcut shortcut [--path P] [--port N]   # genera un launcher de escritorio (doble click, sin terminal)
+jobcut shortcut [--path P] [--port N]   # deja el ícono de jobcut en el Escritorio (doble click, sin terminal)
 jobcut dashboard            # Streamlit "lite" (extra [dashboard])
 ```
 

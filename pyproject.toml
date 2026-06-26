@@ -54,7 +54,7 @@ Issues = "https://github.com/Nicofragon/jobcut/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-jobcut = ["templates/*.md", "templates/*.json", "templates/searches/*.json"]
+jobcut = ["templates/*.md", "templates/*.json", "templates/searches/*.json", "assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
