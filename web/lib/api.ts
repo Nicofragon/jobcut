@@ -84,6 +84,9 @@ export type JobDetail = {
     backend: string | null;
   } | null;
   application: Application | null;
+  // B-17: a salary the employer disclosed only in the description body (structured fields
+  // empty). null when there's a structured band or no salary in the text.
+  salary_listing: string | null;
   // B-15: a Cowork-estimated band when the employer didn't disclose one. null otherwise.
   salary_estimate: SalaryEstimate | null;
 };

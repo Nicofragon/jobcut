@@ -194,8 +194,10 @@ function JobDetailView() {
     : null;
   const reasons = (score?.match_reasons ?? "").split(",").map((r) => r.trim()).filter(Boolean);
   const sal = job ? salaryText(job) : null;
-  // Show an estimate only when there's no disclosed band (never override a real one).
-  const est = !sal && data?.salary_estimate ? estimateText(data.salary_estimate) : null;
+  // Precedence: structured band > a band the employer stated in the description (B-17) >
+  // a Cowork estimate (B-15). Each only fills in when the more-authoritative one is absent.
+  const listing = !sal ? data?.salary_listing ?? null : null;
+  const est = !sal && !listing && data?.salary_estimate ? estimateText(data.salary_estimate) : null;
   const description = job?.description ?? null;
   const wp = job?.workplace_type
     ? job.workplace_type.replace(/_/g, "-").replace(/\b\w/g, (c) => c.toUpperCase())
@@ -307,6 +309,9 @@ function JobDetailView() {
               {job?.location && <Chip icon="map-pin">{job.location}</Chip>}
               {wp && <Chip icon="briefcase" tone="primary">{wp}</Chip>}
               {sal && <Chip icon="banknote">{sal}</Chip>}
+              {listing && (
+                <Chip icon="banknote" title="Stated in the job description">{listing}</Chip>
+              )}
               {est && (
                 <Chip icon="banknote" estimated title={data?.salary_estimate?.basis ?? "Estimated, not disclosed by the employer"}>
                   {est} · est.
