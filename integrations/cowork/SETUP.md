@@ -39,26 +39,42 @@ Nine skills (each a folder under [`skills/`](skills/)):
 
 ## 3. Install the skills
 
-Run the installer from the repo root — it copies **all** the skill folders into your
-Claude skills directory and verifies each one landed:
+**Claude Code and Cowork install skills differently** — Code reads a folder on disk,
+Cowork imports each skill through its UI. Use the path for the tool you drive jobcut
+with.
+
+### Claude Code (CLI) — copy the folders
+
+The installer copies **all** the skill folders into your Claude skills directory
+(`~/.claude/skills/` by default) and verifies each one landed:
 
 ```bash
-bash integrations/cowork/install.sh            # -> ~/.claude/skills (Claude Code)
-bash integrations/cowork/install.sh <dir>      # -> your Cowork skills directory
+bash integrations/cowork/install.sh            # -> ~/.claude/skills
+bash integrations/cowork/install.sh <dir>      # -> a directory you choose
 ```
 
-> **Claude Code and Cowork read *different* directories — this matters.**
-> Claude **Code** indexes `~/.claude/skills/` (the default above). Claude **Cowork**
-> indexes **its own** skills directory — often your notes/vault's `.claude/skills/`,
-> **not** the home one. If you drive jobcut from Cowork, pass *that* directory to the
-> installer; installing only into `~/.claude/skills/` makes the skills visible to
-> Claude Code but **invisible to Cowork** (Claude will then quietly improvise instead
-> of using the skill). Not sure which path your Cowork uses? Install into both.
+Then **reload Claude Code** and ask it to **run the `jobcut` skill** — it confirms
+every skill is loaded and the CLI/data dir resolve, and says what's missing if not.
 
-After installing, **reload Claude** (Code or Cowork) so it picks up the new skills,
-then ask it to **run the `jobcut` skill** — it confirms every skill is loaded and the
-CLI/data dir resolve, and tells you exactly what's missing if not. (Each skill is a
-folder with its `SKILL.md` inside; the installer keeps that intact.)
+### Cowork (desktop) — upload each skill via Personalizar
+
+Cowork does **not** read a skills folder; it imports skills through its UI, **one
+skill per file**. Build a zip per skill, then upload them:
+
+```bash
+bash integrations/cowork/install.sh --zip                 # -> ./jobcut-skill-zips
+bash integrations/cowork/install.sh --zip ~/Desktop/jobcut-skills   # somewhere handy
+```
+
+Then in Cowork: **Personalizar → Subir habilidad**, and drop in each `<skill>.zip`.
+Start with **`jobcut.zip`** — it's the front door (readiness check + routing); the
+other eight are the workers it dispatches to. It's a one-time setup (≈9 uploads);
+after importing, the skills appear under Personalizar — no reload needed. Then say
+**"trabajemos en mi búsqueda de empleo con jobcut"** / **"is jobcut ready?"** to have
+the front door verify everything and route you.
+
+> A single zip with all nine skills does **not** work — Cowork's uploader takes one
+> skill (one `SKILL.md`) per file. Upload the nine individually.
 
 ## 4. Configure the data dir
 
