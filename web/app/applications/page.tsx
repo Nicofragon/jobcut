@@ -105,7 +105,7 @@ export default function ApplicationsPage() {
 
       {rows.length === 0 ? (
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-on-surface">Active Applications</h2>
+          <h2 className="text-lg font-semibold text-on-surface">Applications</h2>
           <EmptyState />
         </section>
       ) : (
@@ -782,6 +782,16 @@ const ACTIVE_RANK: Record<string, number> = {
 };
 const activeRank = (cat: string) => ACTIVE_RANK[cat] ?? 1;
 
+// B-14: the single highlighted group — roles actively moving through screening /
+// interviews. Reuses the B-3 activity clock: a categorically in-process role that has
+// gone stalled or dormant is NOT "in process" here (it drops to the flat list below, and
+// NeedsAttention nudges it). Offer is terminal-good (celebrated in the funnel), so it's
+// not in this block — the "active first" sort still floats it to the top of the rest.
+const IN_PROCESS_CATS = new Set(["Interview", "Screen", "Active", "Reviewing"]);
+function isInProcess(r: Row): boolean {
+  return IN_PROCESS_CATS.has(r.status_category) && !r.stalled && !r.dormant;
+}
+
 function TrackerList({
   rows,
   onRemove,
@@ -815,12 +825,16 @@ function TrackerList({
   // category just fragments the list. The status pill on each row shows its current stage;
   // the chips above filter, the dropdown sorts.
   const sorted = visible.slice().sort(sorter);
+  // B-14: one separation only — what's actively moving vs. the rest. Filter + sort run
+  // first (above), so both controls keep working within each block.
+  const inProc = sorted.filter(isInProcess);
+  const rest = sorted.filter((r) => !isInProcess(r));
 
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-on-surface">
-          Active Applications <span className="font-normal text-on-surface-faint">· {visible.length}</span>
+          Applications <span className="font-normal text-on-surface-faint">· {visible.length}</span>
         </h2>
         <label className="flex items-center gap-2 text-sm text-on-surface-variant">
           Sort
@@ -850,10 +864,33 @@ function TrackerList({
         ))}
       </div>
 
-      <div className="space-y-2.5">
-        {sorted.map((r) => (
-          <AppRow key={r.job_id} row={r} onRemove={onRemove} onChanged={onChanged} />
-        ))}
+      <div className="space-y-5">
+        {inProc.length > 0 && (
+          <div className="space-y-2.5 rounded-card bg-surface-sunken p-3">
+            <div className="flex items-center gap-2 px-1">
+              <span className="h-2 w-2 rounded-full" style={{ background: CATEGORY_COLOR.Interview }} />
+              <h3 className="text-sm font-semibold text-on-surface">In process</h3>
+              <span className="text-sm tabular-nums text-on-surface-faint">· {inProc.length}</span>
+              <span className="ml-1 text-xs text-on-surface-faint">actively moving</span>
+            </div>
+            {inProc.map((r) => (
+              <AppRow key={r.job_id} row={r} onRemove={onRemove} onChanged={onChanged} />
+            ))}
+          </div>
+        )}
+        {rest.length > 0 && (
+          <div className="space-y-2.5">
+            {inProc.length > 0 && (
+              <div className="flex items-center gap-2 px-1">
+                <h3 className="text-sm font-semibold text-on-surface-variant">Everything else</h3>
+                <span className="text-sm tabular-nums text-on-surface-faint">· {rest.length}</span>
+              </div>
+            )}
+            {rest.map((r) => (
+              <AppRow key={r.job_id} row={r} onRemove={onRemove} onChanged={onChanged} />
+            ))}
+          </div>
+        )}
         {sorted.length === 0 && (
           <p className="text-sm text-on-surface-variant">No applications in this stage.</p>
         )}
