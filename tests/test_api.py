@@ -117,6 +117,28 @@ def test_job_detail_includes_salary_estimate(client):
     assert est["currency"] == "EUR" and est["basis"] == "Levels.fyi"
 
 
+def test_job_detail_salary_from_description(client):
+    # B-17: salary stated only in the description body → surfaced as salary_listing
+    conn = db.connect()
+    row = {c: "" for c in db.JOB_COLS}
+    row.update(job_id="10", title="BI Analyst", company_name="Acme",
+               description="Great team. Salary: Up to 60K€ + 20% variable. Apply now.")
+    db.upsert_jobs(conn, {"10": row}, "2026-06-16")
+    conn.close()
+    assert client.get("/api/jobs/10").json()["salary_listing"] == "Salary: Up to 60K€ + 20% variable"
+
+
+def test_job_detail_structured_salary_wins_over_description(client):
+    # a structured band present → don't parse the description (listing stays null)
+    conn = db.connect()
+    row = {c: "" for c in db.JOB_COLS}
+    row.update(job_id="11", title="X", company_name="Acme", salary_text="50k–60k EUR",
+               description="Salary: Up to 99K€ buried in the text")
+    db.upsert_jobs(conn, {"11": row}, "2026-06-16")
+    conn.close()
+    assert client.get("/api/jobs/11").json()["salary_listing"] is None
+
+
 def test_job_detail_application_only(client):
     # A row the user owns (an application) with no jobs row must open (200, job:null),
     # never 404 — so notes + status stay reachable. KR-v2-5.

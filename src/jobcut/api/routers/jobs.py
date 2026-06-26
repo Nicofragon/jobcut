@@ -6,7 +6,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ... import db, surface
+from ... import db, salaryparse, surface
 from ..deps import get_conn
 
 router = APIRouter(tags=["jobs"])
@@ -60,6 +60,14 @@ def get_job(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
             "backend": None if surface.blank(s.get("backend")) else str(s["backend"]),
         }
 
+    # B-17: when the employer disclosed a salary but only in the description body (not the
+    # structured fields), surface that phrase — distinct from a Cowork estimate.
+    salary_listing = None
+    if job is not None:
+        has_struct = any(not surface.blank(job.get(k)) for k in ("salary_text", "salary_min", "salary_max"))
+        if not has_struct:
+            salary_listing = salaryparse.salary_text_from_description(job.get("description"))
+
     salary_estimate = None
     if estrow is not None:
         e = dict(estrow)
@@ -75,4 +83,5 @@ def get_job(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
             "estimated_at": None if surface.blank(e.get("estimated_at")) else str(e["estimated_at"]),
         }
 
-    return {"job": job, "score": score, "application": application, "salary_estimate": salary_estimate}
+    return {"job": job, "score": score, "application": application,
+            "salary_listing": salary_listing, "salary_estimate": salary_estimate}
