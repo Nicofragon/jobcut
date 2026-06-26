@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jobcut"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "A local, scored LinkedIn job pipeline — wake up to a ranked shortlist, not 200 tabs."
 readme = "README.md"
 license = { text = "MIT" }
