@@ -80,6 +80,8 @@ always free — they never scrape.)
 
 Full step-by-step in [`SETUP.md`](SETUP.md). In short: install jobcut, set
 `JOBCUT_DATA_DIR`, run `jobcut init`, add the Apify token (or do it in the onboarding
-UI), install the skills with `bash integrations/cowork/install.sh` (into the directory
-your Claude tool reads — see SETUP.md; Cowork's differs from Claude Code's), and choose
-your run owner (in-app scheduler by default).
+UI), install the skills, and choose your run owner (in-app scheduler by default). Skill
+install differs by tool: **Claude Code** copies the folders
+(`bash integrations/cowork/install.sh`); **Cowork** imports each skill through its UI
+(`bash integrations/cowork/install.sh --zip`, then upload each zip via Personalizar →
+Subir habilidad, starting with `jobcut.zip`). See SETUP.md §3.
