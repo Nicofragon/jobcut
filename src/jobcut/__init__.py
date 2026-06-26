@@ -4,4 +4,4 @@ Public, installable repackaging of a private daily pipeline. See docs/archive/fa
 for the roadmap. SQLite is the canonical data store; scoring is pluggable.
 """
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.0"
