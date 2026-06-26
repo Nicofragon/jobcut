@@ -163,6 +163,8 @@ function JobDetailView() {
   const [justCompleted, setJustCompleted] = useState(false);
   const [advanceDate, setAdvanceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [timing, setTiming] = useState<ProcessTiming>(null);
+  // B-18: the description reads occasionally, so it's collapsed by default when long.
+  const [descOpen, setDescOpen] = useState(false);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -199,6 +201,7 @@ function JobDetailView() {
   const listing = !sal ? data?.salary_listing ?? null : null;
   const est = !sal && !listing && data?.salary_estimate ? estimateText(data.salary_estimate) : null;
   const description = job?.description ?? null;
+  const longDesc = (description?.length ?? 0) > 600;
   const wp = job?.workplace_type
     ? job.workplace_type.replace(/_/g, "-").replace(/\b\w/g, (c) => c.toUpperCase())
     : null;
@@ -285,158 +288,133 @@ function JobDetailView() {
         <Icon name="arrow-left" size={18} /> Back to shortlist
       </Link>
 
-      {/* hero */}
-      <div className="flex flex-col items-start justify-between gap-6 rounded-card border border-border/40 bg-surface p-6 shadow-card md:flex-row">
-        <div className="flex flex-col gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-on-surface md:text-4xl">
-              {job?.title ?? "Role added manually"}
-            </h1>
-            {job?.company_name ? (
-              <p className="mt-1 flex items-center gap-2 text-xl text-on-surface-variant">
-                <Icon name="building" size={20} /> {job.company_name}
-              </p>
-            ) : (
-              appOnly && (
-                <p className="mt-1 text-sm text-on-surface-faint">
-                  In your tracker but not in the market dataset — no scoring or company data.
+      {/* hero + status strip */}
+      <div className="rounded-card border border-border/40 bg-surface p-6 shadow-card">
+        <div className="flex flex-col items-start justify-between gap-6 md:flex-row">
+          <div className="flex flex-col gap-4">
+            <div>
+              <h1 className="text-3xl font-semibold tracking-tight text-on-surface md:text-4xl">
+                {job?.title ?? "Role added manually"}
+              </h1>
+              {job?.company_name ? (
+                <p className="mt-1 flex items-center gap-2 text-xl text-on-surface-variant">
+                  <Icon name="building" size={20} /> {job.company_name}
                 </p>
-              )
-            )}
-          </div>
-          {!appOnly && (
-            <div className="flex flex-wrap gap-2">
-              {job?.location && <Chip icon="map-pin">{job.location}</Chip>}
-              {wp && <Chip icon="briefcase" tone="primary">{wp}</Chip>}
-              {sal && <Chip icon="banknote">{sal}</Chip>}
-              {listing && (
-                <Chip icon="banknote" title="Stated in the job description">{listing}</Chip>
-              )}
-              {est && (
-                <Chip icon="banknote" estimated title={data?.salary_estimate?.basis ?? "Estimated, not disclosed by the employer"}>
-                  {est} · est.
-                </Chip>
+              ) : (
+                appOnly && (
+                  <p className="mt-1 text-sm text-on-surface-faint">
+                    In your tracker but not in the market dataset — no scoring or company data.
+                  </p>
+                )
               )}
             </div>
-          )}
+            {!appOnly && (
+              <div className="flex flex-wrap gap-2">
+                {job?.location && <Chip icon="map-pin">{job.location}</Chip>}
+                {wp && <Chip icon="briefcase" tone="primary">{wp}</Chip>}
+                {sal && <Chip icon="banknote">{sal}</Chip>}
+                {listing && (
+                  <Chip icon="banknote" title="Stated in the job description">{listing}</Chip>
+                )}
+                {est && (
+                  <Chip icon="banknote" estimated title={data?.salary_estimate?.basis ?? "Estimated, not disclosed by the employer"}>
+                    {est} · est.
+                  </Chip>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col items-center gap-1.5">
+            {appOnly ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-medium text-on-surface-variant">
+                <Icon name="building" size={12} /> No market data
+              </span>
+            ) : (
+              <>
+                <ScoreRing score={score?.match_score ?? null} size={96} label />
+                {scorerLabel(score?.backend) && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-medium text-on-surface-variant">
+                    <Icon name="sparkles" size={12} /> Scored {fmtDate(score?.scored_date) ?? "—"} by{" "}
+                    {scorerLabel(score?.backend)}
+                  </span>
+                )}
+              </>
+            )}
+            {data.application?.updated_at && (
+              <span className="text-xs text-on-surface-faint">
+                Updated {fmtDate(data.application.updated_at)}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col items-center gap-1.5">
-          {appOnly ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-sunken px-3 py-1.5 text-xs font-medium text-on-surface-variant">
-              <Icon name="building" size={12} /> No market data
-            </span>
-          ) : (
-            <>
-              <ScoreRing score={score?.match_score ?? null} size={96} label />
-              {scorerLabel(score?.backend) && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs font-medium text-on-surface-variant">
-                  <Icon name="sparkles" size={12} /> Scored {fmtDate(score?.scored_date) ?? "—"} by{" "}
-                  {scorerLabel(score?.backend)}
-                </span>
-              )}
-            </>
-          )}
-          {data.application?.updated_at && (
-            <span className="text-xs text-on-surface-faint">
-              Updated {fmtDate(data.application.updated_at)}
-            </span>
-          )}
+
+        {/* status strip — ex "Application tracker", now a compact band under the title:
+            mini funnel + state pill + status selector + open posting */}
+        <div className="mt-6 flex flex-col gap-4 border-t border-border/60 pt-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center">
+            {STEPS.map((s, i) => {
+              const done = i <= current;
+              const isCurrent = i === current && !terminal;
+              const clickable = s.status != null;
+              return (
+                <div key={s.label} className="flex items-center">
+                  <button
+                    disabled={!clickable}
+                    onClick={() => clickable && s.status && setStep(s.status)}
+                    title={clickable ? `Mark as ${s.label}` : "Saved"}
+                    style={done ? { background: accent, color: "var(--color-on-primary)" } : undefined}
+                    className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+                      done ? "" : "bg-surface-sunken text-on-surface-faint"
+                    } ${isCurrent ? "ring-2 ring-primary/25" : ""} ${
+                      clickable ? "cursor-pointer hover:opacity-90" : "cursor-default"
+                    }`}
+                  >
+                    <Icon name={s.icon} size={13} />
+                  </button>
+                  <span className={`ml-1.5 hidden text-[11px] font-semibold sm:inline ${done ? "text-on-surface" : "text-on-surface-faint"}`}>
+                    {s.label}
+                  </span>
+                  {i < STEPS.length - 1 && (
+                    <span
+                      className="mx-2 h-0.5 w-4 rounded sm:w-5"
+                      style={{ background: i < current ? accent : "var(--color-surface-sunken)" }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {terminal && terminalColor ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+                style={{ color: terminalColor, background: `${terminalColor}1f`, border: `1px solid ${terminalColor}40` }}
+              >
+                Closed · {terminal}
+              </span>
+            ) : data.application ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-tint px-3 py-1.5 text-xs font-semibold text-primary-strong">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" /> In process
+              </span>
+            ) : null}
+            <StatusSelect key={status ?? "none"} jobId={id} value={status} onChanged={load} />
+            {link && (
+              <a
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-sunken px-3.5 py-1.5 text-xs font-semibold text-on-surface transition-colors hover:border-primary/50 hover:text-primary"
+              >
+                <Icon name="external" size={14} /> Open posting
+              </a>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        {/* left: description + tracker */}
+        {/* left: actionable first — interview process, notes, then the long description */}
         <div className="space-y-8 lg:col-span-2">
-          {description ? (
-            <Panel title="Description">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-on-surface-variant">
-                {description}
-              </p>
-            </Panel>
-          ) : (
-            // Imported tracker rows carry no description (the spreadsheet never had one).
-            // Show an honest empty-state instead of silently dropping the panel.
-            (appOnly || data.application) && (
-              <Panel title="Description">
-                <p className="text-sm leading-relaxed text-on-surface-variant">
-                  No description on file — this role came from your tracker.
-                  {link ? " Open the posting to read it." : " No posting link saved either."}
-                </p>
-                {link && (
-                  <a
-                    href={link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary"
-                  >
-                    <Icon name="external" size={16} /> Open posting
-                  </a>
-                )}
-              </Panel>
-            )
-          )}
-
-          <Panel title="Application tracker">
-            {terminal && terminalColor && (
-              <div
-                className="mb-5 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold"
-                style={{
-                  color: terminalColor,
-                  background: `${terminalColor}1f`,
-                  border: `1px solid ${terminalColor}40`,
-                }}
-              >
-                Closed · {terminal}
-              </div>
-            )}
-            <div className="relative mb-8 flex items-center justify-between">
-              <div className="absolute left-0 top-4 -z-10 h-1 w-full bg-surface-sunken" />
-              <div
-                className="absolute left-0 top-4 -z-10 h-1 transition-all"
-                style={{ width: `${(Math.max(current, 0) / (STEPS.length - 1)) * 100}%`, background: accent }}
-              />
-              {STEPS.map((s, i) => {
-                const done = i <= current;
-                const isCurrent = i === current && !terminal;
-                const clickable = s.status != null;
-                return (
-                  <div key={s.label} className="flex flex-col items-center gap-2">
-                    <button
-                      disabled={!clickable}
-                      onClick={() => clickable && s.status && setStep(s.status)}
-                      title={clickable ? `Mark as ${s.label}` : "Saved"}
-                      style={done ? { background: accent, color: "var(--color-on-primary)" } : undefined}
-                      className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                        done ? "" : "bg-surface-sunken text-on-surface-variant"
-                      } ${isCurrent ? "ring-4 ring-primary/20" : ""} ${
-                        clickable ? "cursor-pointer hover:opacity-90" : "cursor-default"
-                      }`}
-                    >
-                      <Icon name={s.icon} size={16} />
-                    </button>
-                    <span className={`text-xs font-semibold ${done ? "text-on-surface" : "text-on-surface-variant"}`}>
-                      {s.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex flex-col items-stretch justify-end gap-3 sm:flex-row sm:items-center">
-              <StatusSelect key={status ?? "none"} jobId={id} value={status} onChanged={load} />
-              {link && (
-                <a
-                  href={link}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-surface-sunken px-4 py-2 text-sm font-medium text-on-surface transition-colors hover:border-primary/40"
-                >
-                  <Icon name="external" size={18} /> Open posting
-                </a>
-              )}
-            </div>
-          </Panel>
-
           {data.application && (() => {
             const stages = parseStages(data.application.process_stages);
             const cur = data.application.process_current ?? 0;
@@ -617,38 +595,80 @@ function JobDetailView() {
               )}
             </div>
           </Panel>
+
+          {/* description last — long, occasional read; collapsed by default */}
+          {description ? (
+            <Panel title="Description">
+              <div className={`relative ${longDesc && !descOpen ? "max-h-[260px] overflow-hidden" : ""}`}>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-on-surface-variant">
+                  {description}
+                </p>
+                {longDesc && !descOpen && (
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-surface to-transparent" />
+                )}
+              </div>
+              {longDesc && (
+                <button
+                  onClick={() => setDescOpen((o) => !o)}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:border-primary hover:text-primary"
+                >
+                  <Icon name="chevron-right" size={16} className={`transition-transform ${descOpen ? "rotate-90" : ""}`} />
+                  {descOpen ? "Show less" : "Show full description"}
+                </button>
+              )}
+            </Panel>
+          ) : (
+            // Imported tracker rows carry no description (the spreadsheet never had one).
+            // Show an honest empty-state instead of silently dropping the panel.
+            (appOnly || data.application) && (
+              <Panel title="Description">
+                <p className="text-sm leading-relaxed text-on-surface-variant">
+                  No description on file — this role came from your tracker.
+                  {link ? " Open the posting to read it." : " No posting link saved either."}
+                </p>
+                {link && (
+                  <a
+                    href={link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary"
+                  >
+                    <Icon name="external" size={16} /> Open posting
+                  </a>
+                )}
+              </Panel>
+            )
+          )}
         </div>
 
-        {/* right: tracking details + why it matches + company */}
+        {/* right: why it matches + tracking details + company */}
         <div className="space-y-8">
+          {/* why this matches — first on the right; wraps inside the card (B-18 overflow fix) */}
+          {!appOnly && reasons.length > 0 && (
+            <div className="rounded-card border border-primary/30 bg-primary-tint p-6">
+              <h3 className="mb-4 text-lg font-semibold text-primary-strong">Why this matches you</h3>
+              <ul className="space-y-3">
+                {reasons.map((r, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-on-surface-variant">
+                    <span className="mt-0.5 shrink-0 text-primary">
+                      <Icon name="check-circle" size={18} />
+                    </span>
+                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* tracking details — depurado: Priority + Due date removed (unused in practice) */}
           {data.application && (
             <Panel title="Tracking details">
               <div className="space-y-4">
-                <FieldRow label="Priority">
-                  <select
-                    defaultValue={data.application.priority ?? ""}
-                    onChange={(e) => patchField("priority", e.target.value)}
-                    className={FIELD_CLS}
-                  >
-                    <option value="">—</option>
-                    <option value="high">High</option>
-                    <option value="normal">Normal</option>
-                    <option value="low">Low</option>
-                  </select>
-                </FieldRow>
                 <FieldRow label="Next action">
                   <input
                     defaultValue={data.application.next_action ?? ""}
                     onBlur={(e) => patchField("next_action", e.target.value)}
                     placeholder="e.g. send portfolio"
-                    className={FIELD_CLS}
-                  />
-                </FieldRow>
-                <FieldRow label="Due date">
-                  <input
-                    type="date"
-                    defaultValue={data.application.next_action_date ?? ""}
-                    onChange={(e) => patchField("next_action_date", e.target.value)}
                     className={FIELD_CLS}
                   />
                 </FieldRow>
@@ -670,22 +690,6 @@ function JobDetailView() {
                 </FieldRow>
               </div>
             </Panel>
-          )}
-
-          {!appOnly && reasons.length > 0 && (
-            <div className="rounded-card border border-border/60 bg-surface-alt p-6">
-              <h3 className="mb-4 text-lg font-semibold text-on-surface">Why this matches you</h3>
-              <ul className="space-y-3">
-                {reasons.map((r, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-on-surface-variant">
-                    <span className="mt-0.5 shrink-0 text-primary">
-                      <Icon name="check-circle" size={18} />
-                    </span>
-                    <span>{r}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
           )}
 
           {!appOnly && job && (
