@@ -4,7 +4,8 @@
 type IconName =
   | "arrow-left" | "arrow-right" | "search" | "refresh" | "building" | "map-pin" | "banknote"
   | "external" | "check" | "check-circle" | "users" | "calendar" | "user"
-  | "briefcase" | "send" | "sparkles" | "lock" | "upload" | "plus" | "x" | "clock" | "chevron-right";
+  | "briefcase" | "send" | "sparkles" | "lock" | "upload" | "plus" | "x" | "clock" | "chevron-right"
+  | "file-text";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   "chevron-right": <path d="m9 18 6-6-6-6" />,
@@ -29,6 +30,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
   send: <><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></>,
   sparkles: <><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  "file-text": <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M16 13H8M16 17H8M10 9H8" /></>,
 };
 
 export function Icon({

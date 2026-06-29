@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import {
   addEvent,
   advanceProcess,
+  getDocuments,
   getEvents,
   getJob,
   getProcessTiming,
@@ -14,11 +15,13 @@ import {
   setStatus,
   suggestProcess,
   type ApplicationFields,
+  type AppDocument,
   type AppEvent,
   type JobDetail,
   type ProcessTiming,
   type SalaryEstimate,
 } from "@/lib/api";
+import DocumentViewer from "@/components/DocumentViewer";
 import ScoreRing from "@/components/ScoreRing";
 import StatusSelect from "@/components/StatusSelect";
 import { Icon } from "@/components/icons";
@@ -160,6 +163,7 @@ function JobDetailView() {
   const [data, setData] = useState<JobDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<AppEvent[]>([]);
+  const [documents, setDocuments] = useState<AppDocument[]>([]);
   const [draft, setDraft] = useState("");
   const [status, setLocalStatus] = useState<string | null>(null); // optimistic
   // Interview process inline editor state
@@ -175,14 +179,21 @@ function JobDetailView() {
 
   const load = useCallback(() => {
     if (!id) return;
-    // Timing is supplementary — never let it block the page (a job with no application
-    // returns null; any other hiccup degrades to "no timing" rather than an error screen).
-    Promise.all([getJob(id), getEvents(id), getProcessTiming(id).catch(() => null)])
-      .then(([d, ev, t]) => {
+    // Timing and documents are supplementary — never let them block the page (a job with no
+    // application returns null/[]; any other hiccup degrades to "no timing/docs" rather than
+    // an error screen).
+    Promise.all([
+      getJob(id),
+      getEvents(id),
+      getProcessTiming(id).catch(() => null),
+      getDocuments(id).catch(() => [] as AppDocument[]),
+    ])
+      .then(([d, ev, t, docs]) => {
         setData(d);
         setLocalStatus(d.application?.status ?? null);
         setEvents(ev);
         setTiming(t);
+        setDocuments(docs);
         setError(null);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "failed to load"));
@@ -216,6 +227,18 @@ function JobDetailView() {
   const terminal = status ? TERMINAL[status] ?? null : null;
   const terminalColor = terminal ? CATEGORY_COLOR[terminal] : null;
   const accent = terminal && terminalColor ? terminalColor : "var(--color-primary)";
+
+  // Prep documents: offer-level (event_id null) shown in their own panel; the rest hang
+  // off the timeline event they're anchored to (D2).
+  const offerDocs = documents.filter((d) => d.event_id == null);
+  const docsByEvent = new Map<number, AppDocument[]>();
+  for (const d of documents) {
+    if (d.event_id != null) {
+      const list = docsByEvent.get(d.event_id) ?? [];
+      list.push(d);
+      docsByEvent.set(d.event_id, list);
+    }
+  }
 
   async function setStep(next: string) {
     setLocalStatus(next); // optimistic
@@ -565,6 +588,16 @@ function JobDetailView() {
             );
           })()}
 
+          {offerDocs.length > 0 && (
+            <Panel title="Prep documents">
+              <div className="space-y-2">
+                {offerDocs.map((d) => (
+                  <DocCard key={d.doc_id} doc={d} />
+                ))}
+              </div>
+            </Panel>
+          )}
+
           <Panel title="Notes & activity">
             <div className="space-y-3">
               <textarea
@@ -596,7 +629,7 @@ function JobDetailView() {
               ) : (
                 <ul className="space-y-4">
                   {events.map((e) => (
-                    <TimelineRow key={e.event_id} e={e} />
+                    <TimelineRow key={e.event_id} e={e} docs={docsByEvent.get(e.event_id) ?? []} />
                   ))}
                 </ul>
               )}
@@ -755,7 +788,7 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
-function TimelineRow({ e }: { e: AppEvent }) {
+function TimelineRow({ e, docs = [] }: { e: AppEvent; docs?: AppDocument[] }) {
   const dot = EVENT_DOT[e.kind] ?? "#64748b";
   const isNote = e.kind === "note";
   return (
@@ -770,8 +803,53 @@ function TimelineRow({ e }: { e: AppEvent }) {
           {eventLabel(e)}
         </p>
         <p className="mt-0.5 text-xs text-on-surface-faint">{fmtEventWhen(e)}</p>
+        {docs.length > 0 && (
+          <div className="mt-2 space-y-2">
+            {docs.map((d) => (
+              <DocCard key={d.doc_id} doc={d} />
+            ))}
+          </div>
+        )}
       </div>
     </li>
+  );
+}
+
+// A document shown as a collapsible card: title + type label, expanding in place to the
+// sanitised markdown body. The list endpoint already carries the body, so opening is local.
+const DOC_TYPE_LABEL: Record<string, string> = {
+  prep: "Prep",
+  debrief: "Debrief",
+  study: "Study",
+  other: "Doc",
+};
+
+function DocCard({ doc }: { doc: AppDocument }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="overflow-hidden rounded-lg border border-border/60 bg-surface-alt">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-sunken"
+      >
+        <span className="shrink-0 text-on-surface-faint">
+          <Icon name="file-text" size={16} />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-on-surface">{doc.title}</span>
+        <span className="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant">
+          {DOC_TYPE_LABEL[doc.doc_type] ?? "Doc"}
+        </span>
+        <span className="shrink-0 text-on-surface-faint">
+          <Icon name="chevron-right" size={16} className={`transition-transform ${open ? "rotate-90" : ""}`} />
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-border/60 bg-surface px-4 py-3">
+          <DocumentViewer body={doc.body} />
+        </div>
+      )}
+    </div>
   );
 }
 
