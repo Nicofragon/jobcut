@@ -370,6 +370,27 @@ export const regenerateMarket = () => api<Market>("/market", { method: "POST" })
 export const exportData = () =>
   api<{ out_dir: string; summary: Record<string, unknown> }>("/export", { method: "POST" });
 
+// B-20: update jobcut from its repo (runs locally where `jobcut serve` runs).
+export type UpdateResult = {
+  ok: boolean;
+  step: string;
+  blocked: boolean;
+  message: string;
+  is_git?: boolean;
+  branch?: string | null;
+  sha?: string | null;
+  from_sha?: string;
+  to_sha?: string;
+  updated?: boolean;
+  rebuilt?: boolean;
+  clean?: boolean;
+  dirty_files?: string[];
+};
+
+export const getUpdateStatus = () => api<UpdateResult>("/update");
+// The pull + rebuild can take a while; the browser waits on the single POST.
+export const updateApp = () => api<UpdateResult>("/update", { method: "POST" });
+
 export type RunKind = "pull" | "score";
 
 export const startRun = (kind: RunKind, mode = "read", confirm = false) =>

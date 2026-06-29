@@ -8,13 +8,16 @@ import {
   getHealth,
   getSchedule,
   getScoringBackends,
+  getUpdateStatus,
   putConfig,
   putCredentials,
   putSchedule,
+  updateApp,
   validateCredentials,
   type Health,
   type Schedule,
   type ScoringBackend,
+  type UpdateResult,
   type Validation,
 } from "@/lib/api";
 import { Icon } from "@/components/icons";
@@ -142,6 +145,8 @@ export default function SettingsPage() {
         </button>
       </Card>
 
+      <UpdateCard />
+
       <details className="rounded-card border border-border bg-surface p-5 shadow-card">
         <summary className="cursor-pointer text-sm font-medium text-on-surface-faint hover:text-on-surface-variant">
           Diagnostics
@@ -173,6 +178,81 @@ const btnPrimary =
   "rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-on-primary shadow-card transition-colors hover:bg-primary-hover disabled:opacity-50";
 const btnGhost =
   "rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-alt disabled:opacity-50";
+
+function UpdateCard() {
+  const [status, setStatus] = useState<UpdateResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<UpdateResult | null>(null);
+
+  useEffect(() => {
+    getUpdateStatus().then(setStatus).catch(() => {});
+  }, []);
+
+  async function run() {
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await updateApp();
+      setResult(r);
+      getUpdateStatus().then(setStatus).catch(() => {});
+    } catch (e) {
+      setResult({
+        ok: false,
+        step: "error",
+        blocked: false,
+        message: e instanceof Error ? e.message : "Update failed — is `jobcut serve` running?",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const notGit = status != null && status.is_git === false;
+  const subtitle = status?.is_git
+    ? `On ${status.branch ?? "?"} · ${status.sha ?? "?"}${status.clean === false ? " · local changes" : ""}`
+    : "Bring in the newest code and rebuild the console.";
+
+  return (
+    <Card title="Update jobcut" subtitle={subtitle}>
+      {notGit ? (
+        <p className="text-sm text-on-surface-variant">
+          This install isn’t a git checkout, so there’s nothing to update from.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-on-surface-variant">
+            Pulls the latest code from the repo and rebuilds the console. Runs on this
+            computer and is read-only on your data — it never scrapes, scores, or deletes.
+          </p>
+          <button onClick={run} disabled={busy} className={`${btnPrimary} mt-3`}>
+            {busy ? "Updating…" : "Update from repo"}
+          </button>
+          {result && (
+            <div
+              className={`mt-3 rounded-lg border p-3 text-sm ${
+                result.ok
+                  ? "border-primary/30 bg-primary-tint text-on-surface"
+                  : "border-amber-300 bg-amber-50 text-on-surface"
+              }`}
+            >
+              <p>{result.message}</p>
+              {result.blocked && result.dirty_files && result.dirty_files.length > 0 && (
+                <ul className="mt-2 list-inside list-disc font-mono text-xs text-on-surface-variant">
+                  {result.dirty_files.slice(0, 12).map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                  {result.dirty_files.length > 12 && (
+                    <li>+{result.dirty_files.length - 12} more</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
 
 function Automation() {
   const [s, setS] = useState<Schedule | null>(null);
