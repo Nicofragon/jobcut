@@ -735,6 +735,18 @@ def cmd_dashboard(args) -> int:
         return 1
 
 
+def cmd_update(args) -> int:
+    """Pull the latest code and rebuild the console (same path as the UI's Update button)."""
+    from . import update as _update
+
+    res = _update.run_update(rebuild=not getattr(args, "no_build", False))
+    print(res["message"])
+    if res.get("blocked"):
+        for f in res.get("dirty_files", []):
+            print(f"    {f}")
+    return 0 if res["ok"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="jobcut", description="A local, scored LinkedIn job pipeline.")
     sub = p.add_subparsers(dest="command", required=True)
@@ -841,6 +853,10 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--replace", action="store_true",
                     help="if the port is busy, stop the process holding it and take over")
     ps.set_defaults(func=cmd_serve)
+
+    pu = sub.add_parser("update", help="pull the latest code from the repo and rebuild the console")
+    pu.add_argument("--no-build", action="store_true", help="pull only; don't rebuild the web console")
+    pu.set_defaults(func=cmd_update)
 
     psc = sub.add_parser("shortcut", help="create a double-click desktop launcher for the console (no terminal)")
     psc.add_argument("--path", default="", help="where to write the launcher (default: ~/Desktop)")
