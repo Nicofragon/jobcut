@@ -23,7 +23,7 @@ import pandas as pd
 
 from . import paths, status
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 def _now_iso() -> str:
@@ -83,6 +83,17 @@ APPLICATION_COLS = ["job_id", "status", "status_category", "applied_at", "update
 # scoring), so the re-score invariant holds. `meta` is JSON-in-TEXT so per-event detail
 # can grow without another schema bump. See docs/adr-002.
 APPLICATION_EVENT_COLS = ["event_id", "job_id", "ts", "kind", "from_status", "to_status", "body", "meta"]
+
+# application_documents (v8): prep/debrief/study markdown a user's AI assistant produces
+# around each stage of a process, attached to an application and optionally anchored to a
+# specific timeline event (`event_id` → application_events.event_id; NULL = offer-level).
+# Its OWN table (like scores/salary_estimates), never overloads application_events: docs are
+# long, versioned (`supersedes_id`), idempotently re-ingested (`client_key`) and soft-deletable
+# (`archived_at`) — the lean activity timeline stays an activity log; docs hang off it. Written
+# only via the ingest bridge (`ingest-documents`), read-only in the console. See PRD-prep-docs.
+APPLICATION_DOCUMENT_COLS = ["doc_id", "job_id", "event_id", "doc_type", "title", "body",
+                            "created_at", "updated_at", "supersedes_id", "client_key",
+                            "archived_at", "meta"]
 
 # score_runs (v3): calibration sidecar. One row per (job_id, backend) so several
 # backends can be compared side-by-side. ADDITIVE — never touches `scores` (the
@@ -184,12 +195,29 @@ def init_schema(conn: sqlite3.Connection) -> None:
           "source" TEXT DEFAULT 'cowork_web',
           "estimated_at" TEXT
         );
+        CREATE TABLE IF NOT EXISTS application_documents (
+          "doc_id" INTEGER PRIMARY KEY AUTOINCREMENT,
+          "job_id" TEXT NOT NULL,
+          "event_id" INTEGER,
+          "doc_type" TEXT DEFAULT 'prep',
+          "title" TEXT NOT NULL,
+          "body" TEXT NOT NULL,
+          "created_at" TEXT,
+          "updated_at" TEXT,
+          "supersedes_id" INTEGER,
+          "client_key" TEXT,
+          "archived_at" TEXT,
+          "meta" TEXT DEFAULT ''
+        );
         CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT);
         CREATE INDEX IF NOT EXISTS idx_jobs_first_seen ON jobs(first_seen);
         CREATE INDEX IF NOT EXISTS idx_scores_date ON scores(scored_date);
         CREATE INDEX IF NOT EXISTS idx_applications_category ON applications(status_category);
         CREATE INDEX IF NOT EXISTS idx_score_runs_backend ON score_runs(backend);
         CREATE INDEX IF NOT EXISTS idx_app_events_job ON application_events(job_id);
+        CREATE INDEX IF NOT EXISTS idx_app_docs_job ON application_documents(job_id);
+        CREATE INDEX IF NOT EXISTS idx_app_docs_event ON application_documents(event_id);
+        CREATE INDEX IF NOT EXISTS idx_app_docs_client ON application_documents(job_id, client_key);
         """
     )
     # v4: add scores.backend for DBs created before v4 (CREATE handles fresh DBs).
@@ -588,6 +616,86 @@ def get_events(conn: sqlite3.Connection, job_id: str) -> list[dict]:
         (str(job_id),),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# --- application_documents: prep/debrief/study markdown (v8) -----------------
+
+DOC_TYPES = ("prep", "debrief", "study", "other")
+
+
+def upsert_document(conn: sqlite3.Connection, *, job_id: str, title: str, body: str,
+                    event_id: int | None = None, doc_type: str = "prep",
+                    supersedes_id: int | None = None, client_key: str | None = None,
+                    meta: str = "", now: str | None = None) -> dict:
+    """Insert a document, or update in place when (job_id, client_key) already exists.
+
+    Idempotency (D4): a non-empty `client_key` matching an existing row UPDATES it
+    (event_id/doc_type/title/body/supersedes_id/meta + `updated_at`), preserving
+    `created_at` and `doc_id`. An omitted/empty `client_key` always INSERTs — an un-keyed
+    re-ingest makes a new row by design. `doc_type` is coerced to the DOC_TYPES set.
+    Returns the stored row.
+    """
+    ts = now or _now_iso()
+    dt = doc_type if doc_type in DOC_TYPES else "other"
+    jid = str(job_id)
+    key = str(client_key) if client_key else None
+    existing = None
+    if key:
+        existing = conn.execute(
+            "SELECT doc_id FROM application_documents WHERE job_id = ? AND client_key = ?",
+            (jid, key),
+        ).fetchone()
+    if existing is not None:
+        conn.execute(
+            'UPDATE application_documents SET "event_id" = ?, "doc_type" = ?, "title" = ?, '
+            '"body" = ?, "updated_at" = ?, "supersedes_id" = ?, "meta" = ? WHERE doc_id = ?',
+            (event_id, dt, title, body, ts, supersedes_id, meta or "", existing["doc_id"]),
+        )
+        doc_id = existing["doc_id"]
+    else:
+        cur = conn.execute(
+            'INSERT INTO application_documents ("job_id","event_id","doc_type","title","body",'
+            '"created_at","updated_at","supersedes_id","client_key","archived_at","meta") '
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+            (jid, event_id, dt, title, body, ts, ts, supersedes_id, key, None, meta or ""),
+        )
+        doc_id = cur.lastrowid
+    conn.commit()
+    row = conn.execute("SELECT * FROM application_documents WHERE doc_id = ?", (doc_id,)).fetchone()
+    return dict(row)
+
+
+def get_documents(conn: sqlite3.Connection, job_id: str,
+                  include_archived: bool = False) -> list[dict]:
+    """Documents for an application: offer-level (NULL event_id) first, then by event, then
+    creation order. Excludes archived rows unless `include_archived`."""
+    sql = "SELECT * FROM application_documents WHERE job_id = ?"
+    if not include_archived:
+        sql += " AND archived_at IS NULL"
+    sql += " ORDER BY (event_id IS NOT NULL), event_id, created_at, doc_id"
+    rows = conn.execute(sql, (str(job_id),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_document(conn: sqlite3.Connection, doc_id: int) -> dict | None:
+    """One document by id (including body), or None if absent."""
+    row = conn.execute(
+        "SELECT * FROM application_documents WHERE doc_id = ?", (int(doc_id),)
+    ).fetchone()
+    return dict(row) if row is not None else None
+
+
+def set_document_archived(conn: sqlite3.Connection, doc_id: int, archived: bool = True,
+                          now: str | None = None) -> dict | None:
+    """Soft-delete (`archived=True` stamps `archived_at`) or restore (`False` clears it).
+    Never hard-deletes — append-only ethos. Returns the updated row, or None if absent."""
+    did = int(doc_id)
+    if conn.execute("SELECT 1 FROM application_documents WHERE doc_id = ?", (did,)).fetchone() is None:
+        return None
+    ts = (now or _now_iso()) if archived else None
+    conn.execute("UPDATE application_documents SET archived_at = ? WHERE doc_id = ?", (ts, did))
+    conn.commit()
+    return get_document(conn, did)
 
 
 # An open application idle this many days needs a nudge ("stalled"); past DORMANT_DAYS
