@@ -37,6 +37,16 @@ export function scorerLabel(backend: string | null | undefined): string | null {
   return SCORER_LABELS[backend] ?? backend;
 }
 
+// Parse a stored ISO timestamp for display (B-19). New timestamps are UTC-aware
+// (`…+00:00`); legacy rows are naive but were stamped in UTC — so a naive datetime
+// means UTC, not local. Append `Z` when a datetime carries no offset so the browser
+// localizes both forms identically (fixes the "2h behind" notes). Date-only strings
+// ("YYYY-MM-DD") are left untouched.
+export function isoToLocal(iso: string): Date {
+  const needsUtc = iso.includes("T") && !/([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+  return new Date(needsUtc ? `${iso}Z` : iso);
+}
+
 export function offerLink(item: {
   linkedin_url: string | null;
   apply_url: string | null;
