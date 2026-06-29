@@ -69,21 +69,43 @@ def test_pull_advances_to_remote_head(clone):
     assert (work / "NEW.md").exists()
 
 
-def test_dirty_tree_blocks_non_destructively(clone):
-    _origin, work = clone
-    (work / "README.md").write_text("local edit, keep me")  # tracked change
+def test_conflicting_tracked_change_blocks_non_destructively(clone):
+    # Local edit to a file that ALSO changed upstream → git refuses the ff and aborts.
+    # We surface it as blocked, and nothing is overwritten (git is the guard).
+    origin, work = clone
+    (origin / "README.md").write_text("upstream v2")
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-m", "touch README upstream")
+    (work / "README.md").write_text("local edit, keep me")  # conflicts with the incoming change
     res = update.run_update(work, rebuild=False)
     assert res["ok"] is False and res["blocked"] is True
     assert "README.md" in res["dirty_files"]
     assert (work / "README.md").read_text() == "local edit, keep me"  # untouched
 
 
-def test_fs_noise_does_not_block(clone):
-    _origin, work = clone
-    (work / ".fuse_hidden0001").write_text("mount junk")
-    (work / ".DS_Store").write_text("os junk")
-    pf = update.preflight(work)
-    assert pf["clean"] is True and pf["dirty_files"] == []
+def test_untracked_files_never_block(clone):
+    # DB backups, local scratch dirs, etc. are untracked — a ff pull doesn't touch them,
+    # so they must neither flag the tree dirty nor block the update.
+    origin, work = clone
+    (work / "jobcut.db.bak-20260625-183746").write_text("backup")
+    (work / ".superpowers").mkdir()
+    (work / ".superpowers" / "x").write_text("scratch")
+    assert update.preflight(work)["clean"] is True            # untracked → still clean
+    _commit(origin, "NEW.md", "v2")                            # remote moves ahead
+    res = update.run_update(work, rebuild=False)
+    assert res["ok"] is True and res["updated"] is True        # pulled past the junk
+    assert (work / "jobcut.db.bak-20260625-183746").exists()  # untracked file preserved
+
+
+def test_local_tracked_edit_preserved_when_not_upstream(clone):
+    # A tracked file edited locally, NOT changed upstream → ff pull succeeds and keeps the edit.
+    origin, work = clone
+    (work / "README.md").write_text("my local notes")
+    _commit(origin, "NEW.md", "v2")  # upstream changes a DIFFERENT file
+    res = update.run_update(work, rebuild=False)
+    assert res["ok"] is True and res["updated"] is True
+    assert (work / "README.md").read_text() == "my local notes"  # edit preserved
+    assert (work / "NEW.md").exists()
 
 
 def test_update_router_wiring(monkeypatch):
