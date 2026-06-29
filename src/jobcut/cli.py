@@ -186,6 +186,30 @@ def cmd_ingest_events(args) -> int:
     return 0
 
 
+def cmd_ingest_documents(args) -> int:
+    """Ingest prep/debrief/study documents from a JSON file (e.g. a Claude/Cowork prep skill)."""
+    from . import ingest
+    try:
+        summary = ingest.ingest_documents(args.json)
+    except FileNotFoundError:
+        print(f"ingest-documents: file not found: {args.json}")
+        return 1
+    except ValueError as exc:  # bad JSON or wrong shape (JSONDecodeError is a ValueError)
+        print(f"ingest-documents: invalid documents file ({exc})")
+        return 1
+    msg = f"ingest-documents · wrote {summary['written']} document(s)"
+    if summary["archived"]:
+        msg += f", archived {summary['archived']}"
+    if summary["skipped"]:
+        msg += f", skipped {summary['skipped']} invalid"
+    if summary["unknown_job_ids"]:
+        msg += f", {len(summary['unknown_job_ids'])} job_id(s) not in the jobs table"
+    print(msg)
+    for err in summary["errors"]:
+        print(f"  · skipped: {err}")
+    return 0
+
+
 def cmd_import_jobs(args) -> int:
     """Upsert scraped job rows from a JSON file (flattened or nested actor format)."""
     from . import ingest
@@ -790,6 +814,12 @@ def build_parser() -> argparse.ArgumentParser:
     pie.add_argument("json", help='path to JSON: a list of {job_id, status?|fields?|kind+body+meta?, date?} '
                                   'or {"events": [...]}')
     pie.set_defaults(func=cmd_ingest_events)
+
+    pid = sub.add_parser("ingest-documents",
+                         help="ingest prep/debrief/study documents from a JSON file (read-only in the console)")
+    pid.add_argument("json", help='path to JSON: {"documents": [{job_id, title, body, event_id?, doc_type?, '
+                                  'client_key?, supersedes_id?, meta?}], "archive"?: [{doc_id, restore?}]}')
+    pid.set_defaults(func=cmd_ingest_documents)
 
     pisal = sub.add_parser("ingest-salary",
                            help="upsert salary estimates from a JSON file (e.g. a Claude/Cowork salary skill)")
