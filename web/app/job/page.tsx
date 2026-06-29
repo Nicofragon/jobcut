@@ -23,7 +23,7 @@ import ScoreRing from "@/components/ScoreRing";
 import StatusSelect from "@/components/StatusSelect";
 import { Icon } from "@/components/icons";
 import { ErrorNote, Loading } from "@/components/States";
-import { CATEGORY_COLOR, offerLink, scorerLabel } from "@/lib/ui";
+import { CATEGORY_COLOR, isoToLocal, offerLink, scorerLabel } from "@/lib/ui";
 
 export default function JobPage() {
   return (
@@ -63,15 +63,22 @@ const TERMINAL: Record<string, string> = {
 
 function fmtDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
-  const d = new Date(iso);
+  const d = isoToLocal(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
 function fmtWhen(iso: string): string {
-  const d = new Date(iso);
+  const d = isoToLocal(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// Interview rounds are day-granular (the backend models them by date, anchored to
+// noon), so their time-of-day is fabricated — show the date only. Real instants
+// (notes, status changes) keep the time.
+function fmtEventWhen(e: AppEvent): string {
+  return e.kind === "interview" ? fmtDate(e.ts) ?? fmtWhen(e.ts) : fmtWhen(e.ts);
 }
 
 function parseStages(s: string | null | undefined): string[] {
@@ -762,7 +769,7 @@ function TimelineRow({ e }: { e: AppEvent }) {
         >
           {eventLabel(e)}
         </p>
-        <p className="mt-0.5 text-xs text-on-surface-faint">{fmtWhen(e.ts)}</p>
+        <p className="mt-0.5 text-xs text-on-surface-faint">{fmtEventWhen(e)}</p>
       </div>
     </li>
   );

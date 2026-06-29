@@ -1,5 +1,6 @@
 """Tests for the SQLite layer: upsert/dedupe, source union, volatile refresh."""
 
+import datetime
 import sqlite3
 
 import pytest
@@ -397,3 +398,42 @@ def test_get_and_delete_application(conn):
     assert db.delete_application(conn, "1") == 1
     assert db.get_application(conn, "1") is None
     assert db.delete_application(conn, "1") == 0
+
+
+# --- B-19: UTC-aware stamping + mixed naive/aware aging ----------------------
+
+def test_default_stamps_are_utc_aware(conn):
+    # A real instant (no injected `now`) is stamped UTC-aware (+00:00), so the web
+    # can localize it instead of mis-reading a naive string as local time.
+    db.set_application_status(conn, "1", "applied")
+    ev = conn.execute(
+        "SELECT ts FROM application_events WHERE job_id='1' AND kind='status_change'"
+    ).fetchone()["ts"]
+    parsed = datetime.datetime.fromisoformat(ev)
+    assert parsed.tzinfo is not None
+    assert parsed.utcoffset() == datetime.timedelta(0)
+    # add_event default and applications.updated_at follow the same rule
+    note = db.add_event(conn, "1", "note", body="hi")
+    assert datetime.datetime.fromisoformat(note["ts"]).tzinfo is not None
+    app = db.get_application(conn, "1")
+    assert datetime.datetime.fromisoformat(app["updated_at"]).utcoffset() == datetime.timedelta(0)
+
+
+def test_date_only_interview_anchor_stays_naive(conn):
+    # A round entered as a calendar date is a date, not an instant — it keeps the
+    # naive noon anchor (no offset) so the UI can show it date-only without inventing
+    # a time, and `[:10]` day-granularity logic is unaffected.
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T10:00:00+00:00")
+    db.set_process(conn, "1", ["Recruiter", "Technical"])
+    r = db.advance_process(conn, "1", date="2026-06-08")
+    assert r["event"]["ts"] == "2026-06-08T12:00:00"
+
+
+def test_stage_durations_handles_mixed_naive_and_aware(conn):
+    # Legacy rows are naive; new rows are aware. The aging math must compare them
+    # without the offset-naive/aware TypeError, treating naive as UTC.
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T10:00:00")          # naive (legacy)
+    db.set_application_status(conn, "2", "interview", now="2026-06-04T10:00:00+00:00")    # aware (new)
+    d = db.stage_durations(conn, now="2026-06-21T10:00:00+00:00")
+    assert d["1"]["days_in_stage"] == 20 and d["1"]["stalled"] is True
+    assert d["2"]["days_in_stage"] == 17 and d["2"]["stalled"] is True

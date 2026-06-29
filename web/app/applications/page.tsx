@@ -15,7 +15,7 @@ import {
   type InterviewFunnelRow,
   type ProcessTimingSummary,
 } from "@/lib/api";
-import { CATEGORY_COLOR } from "@/lib/ui";
+import { CATEGORY_COLOR, isoToLocal } from "@/lib/ui";
 import { Icon } from "@/components/icons";
 import { InfoDot } from "@/components/InfoDot";
 import { ErrorNote, SkeletonRows } from "@/components/States";
@@ -983,7 +983,7 @@ function AppRow({
 
 function updatedAgo(iso: string | null): string {
   if (!iso) return "—";
-  const ms = Date.now() - new Date(iso).getTime();
+  const ms = Date.now() - isoToLocal(iso).getTime();
   if (Number.isNaN(ms)) return "—";
   const days = Math.floor(ms / 86_400_000);
   if (days <= 0) return "Updated today";

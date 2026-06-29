@@ -25,6 +25,34 @@ from . import paths, status
 
 SCHEMA_VERSION = 7
 
+
+def _now_iso() -> str:
+    """UTC-aware 'now' for stamping event/application timestamps (B-19).
+
+    Stored as `…+00:00` so the value is self-describing: the web localizes it to the
+    user's zone instead of mis-reading a naive string as local time (the 2h-off bug).
+    """
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+
+def _parse_ts(ts: str | None) -> datetime.datetime | None:
+    """Parse a stored ISO timestamp as an aware UTC datetime, or None if unparseable.
+
+    Legacy rows were stamped naive but in a UTC environment, so a naive value means UTC.
+    Normalizing both naive (old) and offset-tagged (new) to UTC lets the aging math
+    subtract them against each other without the offset-naive/aware TypeError.
+    """
+    if not ts:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(ts)
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc)
+
+
 # jobs columns — mirror pull.flatten() output. job_id is the primary key.
 JOB_COLS = [
     "job_id", "source_searches", "first_seen", "last_seen",
@@ -367,7 +395,7 @@ def set_application_status(conn: sqlite3.Connection, job_id: str, status_value: 
     first apply) and preserved across updates; `updated_at` refreshes every time.
     `notes` is left untouched when None. `now` is injectable for deterministic tests.
     """
-    now = now or datetime.datetime.now().isoformat(timespec="seconds")
+    now = now or _now_iso()
     jid = str(job_id)
     category = status.classify(status_value)
     existing = conn.execute(
@@ -445,7 +473,7 @@ def update_application_fields(conn: sqlite3.Connection, job_id: str, fields: dic
     if row is None:
         return None
     if sets:
-        now = now or datetime.datetime.now().isoformat(timespec="seconds")
+        now = now or _now_iso()
         assignments = ", ".join(f'"{k}" = ?' for k in sets) + ', "updated_at" = ?'
         conn.execute(
             f"UPDATE applications SET {assignments} WHERE job_id = ?",
@@ -472,7 +500,7 @@ def set_process(conn: sqlite3.Connection, job_id: str, stages: list[str],
     if not stages:
         return get_application(conn, jid)
     cur = 0 if current is None else max(0, min(int(current), len(stages)))
-    now = now or datetime.datetime.now().isoformat(timespec="seconds")
+    now = now or _now_iso()
     conn.execute(
         'UPDATE applications SET process_stages = ?, process_current = ?, updated_at = ? '
         'WHERE job_id = ?',
@@ -499,7 +527,7 @@ def advance_process(conn: sqlite3.Connection, job_id: str, note: str = "",
     # stably against other events; a `date` already carrying `T…` is left as-is.
     if date and re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         date = f"{date}T12:00:00"
-    ts = date or now or datetime.datetime.now().isoformat(timespec="seconds")
+    ts = date or now or _now_iso()
     event = None
     if cur < len(stages):
         stage_name = stages[cur]
@@ -537,7 +565,7 @@ def add_event(conn: sqlite3.Connection, job_id: str, kind: str, body: str = "",
     Notes (kind='note') do NOT require an application row — this is the solo-note
     write-path that no longer fabricates an 'applied' status.
     """
-    ts = now or datetime.datetime.now().isoformat(timespec="seconds")
+    ts = now or _now_iso()
     cur = conn.execute(
         'INSERT INTO application_events ("job_id","ts","kind","from_status","to_status","body","meta") '
         'VALUES (?,?,?,?,?,?,?)',
@@ -605,7 +633,7 @@ def stage_durations(conn: sqlite3.Connection, now: str | None = None) -> dict:
     Returns {job_id: {category, since, days_in_stage, stalled, dormant}}. `now` is
     injectable for deterministic tests.
     """
-    now_dt = datetime.datetime.fromisoformat(now) if now else datetime.datetime.now()
+    now_dt = _parse_ts(now) if now else datetime.datetime.now(datetime.timezone.utc)
     apps = conn.execute(
         "SELECT job_id, status_category, applied_at, updated_at FROM applications"
     ).fetchall()
@@ -625,12 +653,10 @@ def stage_durations(conn: sqlite3.Connection, now: str | None = None) -> dict:
     last_activity = {str(r["job_id"]): r["ts"] for r in act_rows}
 
     def _days(ts):
-        if not ts:
+        parsed = _parse_ts(ts)
+        if parsed is None:
             return None
-        try:
-            return (now_dt - datetime.datetime.fromisoformat(ts)).days
-        except ValueError:
-            return None
+        return (now_dt - parsed).days
 
     out: dict[str, dict] = {}
     for a in apps:
