@@ -164,6 +164,23 @@ def post_event(job_id: str, body: EventIn, conn: sqlite3.Connection = Depends(ge
     return db.add_event(conn, job_id, body.kind, body=body.body, meta=body.meta)
 
 
+@router.get("/{job_id}/documents")
+def list_documents(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
+    """Prep/debrief/study documents for this application (excludes archived). Bodies are
+    small markdown, so the list carries them — no second round-trip to open one. Read-only;
+    writes go through the `ingest-documents` CLI bridge, never the API."""
+    return db.get_documents(conn, job_id)
+
+
+@router.get("/{job_id}/documents/{doc_id}")
+def get_document(job_id: str, doc_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    """One document including its body. 404s if it's absent or belongs to another offer."""
+    doc = db.get_document(conn, doc_id)
+    if doc is None or doc["job_id"] != job_id:
+        raise HTTPException(status_code=404, detail="document not found")
+    return doc
+
+
 @router.put("/{job_id}/process")
 def set_process(job_id: str, body: ProcessIn, conn: sqlite3.Connection = Depends(get_conn)):
     updated = db.set_process(conn, job_id, body.stages, current=body.current)
