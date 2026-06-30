@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getHealth, type Health } from "@/lib/api";
 import Logo from "./Logo";
+import ThemeToggle from "./ThemeToggle";
 
 const LINKS = [
   { href: "/", label: "Today" },
@@ -58,6 +59,7 @@ export default function Nav() {
             <span>…</span>
           )}
         </div>
+        <ThemeToggle className="shrink-0" />
       </div>
     </header>
   );

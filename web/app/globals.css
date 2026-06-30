@@ -44,6 +44,9 @@
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.03);
   --shadow-pop: 0 10px 24px rgba(0, 0, 0, 0.06);
 
+  /* Loading-skeleton sweep highlight (overridden on dark — see [data-theme]). */
+  --shimmer-highlight: color-mix(in srgb, #ffffff 55%, transparent);
+
   /* Typography: Inter (next/font, self-hosted — set via --font-inter in layout). */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
@@ -109,7 +112,8 @@ a {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, #ffffff 55%, transparent), transparent);
+  /* Highlight is tokenized so the shimmer dims on dark instead of flashing white. */
+  background: linear-gradient(90deg, transparent, var(--shimmer-highlight), transparent);
 }
 @media (prefers-reduced-motion: no-preference) {
   .skeleton::after {
@@ -184,3 +188,52 @@ a {
 .md-doc th { background: var(--color-surface-alt); font-weight: 600; color: var(--color-on-surface); }
 .md-doc hr { border: 0; border-top: 1px solid var(--color-border); margin: 1.1em 0; }
 .md-doc img { max-width: 100%; height: auto; border-radius: 8px; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Dark theme (B-21). The base @theme above IS the light palette and <html>
+   defaults to data-theme="light", so dark mode only redefines the token VALUES —
+   every component is already tokenized (D1), so nothing else needs to change.
+   The legacy aliases (--color-canvas/panel/fg/…) resolve through var() at use
+   time, so they follow these overrides automatically. Greens/accents are
+   brightened for legibility on a dark canvas; button text flips dark on the
+   brighter green for strong contrast.
+   ─────────────────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  /* Surfaces: deep blue-black canvas, cards a step lighter (depth via tone). */
+  --color-bg: #0b1220;
+  --color-surface: #131b2e;
+  --color-surface-alt: #1b2540;
+  --color-surface-sunken: #0a1019;
+  --color-on-surface: #e7edf6;
+  --color-on-surface-variant: #aab6c6;
+  --color-on-surface-faint: #6f7c8e;
+  --color-border: #263149;
+
+  /* Primary green, brightened for dark; dark text reads strongly on the fill. */
+  --color-primary: #22c55e;
+  --color-primary-hover: #16a34a;
+  --color-on-primary: #052e16;
+  --color-primary-strong: #4ade80;
+  --color-primary-tint: #16331f;
+
+  /* Match-score scale, lifted for dark legibility. */
+  --color-score-high: #22c55e;
+  --color-score-mid: #f59e0b;
+  --color-score-low: #8b978a;
+
+  /* Status accents, brightened to read on the dark canvas. */
+  --color-accent-blue: #60a5fa;
+  --color-accent-amber: #fbbf24;
+  --color-accent-red: #f87171;
+  --color-accent-purple: #a78bfa;
+  --color-accent-cyan: #22d3ee;
+
+  /* Elevation: shadows need more weight to register on dark surfaces. */
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 10px 24px rgba(0, 0, 0, 0.55);
+
+  /* Skeleton sweep: a faint light wash, never a white flash. */
+  --shimmer-highlight: rgba(255, 255, 255, 0.06);
+
+  color-scheme: dark;
+}
