@@ -5,7 +5,7 @@ type IconName =
   | "arrow-left" | "arrow-right" | "search" | "refresh" | "building" | "map-pin" | "banknote"
   | "external" | "check" | "check-circle" | "users" | "calendar" | "user"
   | "briefcase" | "send" | "sparkles" | "lock" | "upload" | "plus" | "x" | "clock" | "chevron-right"
-  | "file-text" | "panel-left";
+  | "file-text" | "panel-left" | "sun" | "moon";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   "chevron-right": <path d="m9 18 6-6-6-6" />,
@@ -32,6 +32,8 @@ const PATHS: Record<IconName, React.ReactNode> = {
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   "file-text": <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M16 13H8M16 17H8M10 9H8" /></>,
   "panel-left": <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></>,
+  moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />,
 };
 
 export function Icon({

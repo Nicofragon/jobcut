@@ -21,6 +21,7 @@ import {
   type Validation,
 } from "@/lib/api";
 import { Icon } from "@/components/icons";
+import { ThemeSegmented } from "@/components/ThemeToggle";
 
 export default function SettingsPage() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -59,6 +60,10 @@ export default function SettingsPage() {
           Edit profile →
         </Link>
       </div>
+
+      <Card title="Appearance" subtitle="Choose how the console looks. Your choice is remembered on this computer.">
+        <ThemeSegmented />
+      </Card>
 
       <Card title="How jobs are scored" subtitle="Pick how each job gets matched to your profile. You can change this anytime.">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -229,10 +234,10 @@ function UpdateCard() {
           </button>
           {result && (
             <div
-              className={`mt-3 rounded-lg border p-3 text-sm ${
+              className={`mt-3 rounded-lg border p-3 text-sm text-on-surface ${
                 result.ok
-                  ? "border-primary/30 bg-primary-tint text-on-surface"
-                  : "border-amber-300 bg-amber-50 text-on-surface"
+                  ? "border-primary/30 bg-primary-tint"
+                  : "border-accent-amber/40 bg-accent-amber/10"
               }`}
             >
               <p>{result.message}</p>
