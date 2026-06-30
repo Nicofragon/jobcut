@@ -1,0 +1,37 @@
+{
+  "_comment": "prep-docs render/sanitise fixture set (KR3). Synthetic — no personal data. Ingest with `jobcut ingest-documents tests/fixtures/prep_docs/sample-documents.json` after creating the matching job/application/event ids, or use the bodies directly to exercise DocumentViewer. The last two entries are XSS payloads that rehype-sanitize MUST neutralise.",
+  "documents": [
+    {
+      "job_id": "fixture:1",
+      "doc_type": "prep",
+      "title": "Company research & role brief",
+      "body": "# Acme — Senior Data Analyst\n\n**Why it matters:** core BI role, Madrid hybrid.\n\n## What they do\n- Marketplace analytics\n- Self-serve dashboards\n\n## Open questions\n1. Team size?\n2. Tooling — dbt or hand-rolled?\n\n> Source: their engineering blog, careers page.\n\nUseful link: [careers](https://example.com/careers)"
+    },
+    {
+      "job_id": "fixture:1",
+      "event_id": 1,
+      "doc_type": "prep",
+      "title": "R3 Technical — SQL/case drill",
+      "body": "## Format\n- 45 min, live SQL\n\n## Drill checklist\n- [x] Window functions\n- [x] CTEs\n- [ ] Funnel conversion query\n\n## Reference query\n```sql\nSELECT stage, COUNT(*) AS n\nFROM application_events\nGROUP BY stage\nORDER BY n DESC;\n```\n\n| Metric | Target |\n| --- | --- |\n| Conversion | > 30% |\n| Avg gap | < 7 days |"
+    },
+    {
+      "job_id": "fixture:1",
+      "event_id": 1,
+      "doc_type": "debrief",
+      "title": "R3 Technical — what they asked",
+      "body": "## Questions\n1. Median vs. average — when each\n2. Designing an A/B funnel table\n\n*Felt strong on SQL, shaky on stats.* Follow up with a stats refresher."
+    },
+    {
+      "job_id": "fixture:1",
+      "doc_type": "other",
+      "title": "INJECTION — inline HTML/script (must be neutralised)",
+      "body": "Normal text before.\n\n<img src=x onerror=\"window.__pwned=true\">\n\n<script>window.__pwned=true</script>\n\n<a href=\"javascript:window.__pwned=true\">click</a>\n\nNormal text after."
+    },
+    {
+      "job_id": "fixture:1",
+      "doc_type": "other",
+      "title": "INJECTION — event handler on allowed tag",
+      "body": "## Heading\n\nA paragraph with an <b onmouseover=\"window.__pwned=true\">event handler</b> on an otherwise-allowed tag."
+    }
+  ]
+}

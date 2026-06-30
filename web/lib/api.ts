@@ -204,6 +204,26 @@ export const addEvent = (jobId: string, body: { kind?: string; body?: string; me
 export const deleteApplication = (jobId: string) =>
   api<{ deleted: string }>(`/applications/${jobId}`, { method: "DELETE" });
 
+// Prep documents (prep-docs): assistant-authored markdown attached to an application,
+// optionally anchored to a timeline event_id (null = offer-level). Read-only in the
+// console; written via the `ingest-documents` CLI bridge. The list carries bodies, so
+// opening one needs no extra request.
+export type AppDocument = {
+  doc_id: number;
+  job_id: string;
+  event_id: number | null;
+  doc_type: string; // 'prep' | 'debrief' | 'study' | 'other'
+  title: string;
+  body: string;
+  created_at: string | null;
+  updated_at: string | null;
+  supersedes_id: number | null;
+};
+export const getDocuments = (jobId: string) =>
+  api<AppDocument[]>(`/applications/${jobId}/documents`);
+export const getDocument = (jobId: string, docId: number) =>
+  api<AppDocument>(`/applications/${jobId}/documents/${docId}`);
+
 // Manual entry (B-1): add a job outside the scraper + link an application, so a role
 // from a company site / Lever / Greenhouse / an expired posting cross-references instead
 // of showing a bare id. The backend derives a stable job_id (from the URL or company+title).

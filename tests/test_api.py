@@ -218,6 +218,36 @@ def test_application_events_timeline(client):
     assert client.post("/api/applications/1/events", json={"kind": "bogus"}).status_code == 422
 
 
+def test_application_documents_read(client):
+    # Documents are written via the ingest bridge (db layer); the API is read-only.
+    conn = db.connect()
+    db.set_application_status(conn, "1", "interview", now="2026-06-16T10:00:00")
+    ev = db.add_event(conn, "1", "interview", body="R3", now="2026-06-20T12:00:00")
+    db.upsert_document(conn, job_id="1", title="Company research", body="## Mission",
+                       event_id=None, now="2026-06-17T10:00:00")
+    anchored = db.upsert_document(conn, job_id="1", title="R3 debrief", body="they asked SQL",
+                                  event_id=ev["event_id"], now="2026-06-21T10:00:00")
+    archived = db.upsert_document(conn, job_id="1", title="old", body="x", now="2026-06-18T10:00:00")
+    db.set_document_archived(conn, archived["doc_id"], now="2026-06-19T10:00:00")
+    conn.close()
+
+    docs = client.get("/api/applications/1/documents").json()
+    titles = [d["title"] for d in docs]
+    assert titles == ["Company research", "R3 debrief"]   # offer-level first; archived hidden
+    assert docs[1]["event_id"] == ev["event_id"]
+
+    one = client.get(f"/api/applications/1/documents/{anchored['doc_id']}")
+    assert one.status_code == 200 and one.json()["body"] == "they asked SQL"
+
+    # 404: unknown id, and an id that belongs to another offer.
+    assert client.get("/api/applications/1/documents/99999").status_code == 404
+    assert client.get(f"/api/applications/2/documents/{anchored['doc_id']}").status_code == 404
+
+
+def test_application_documents_empty(client):
+    assert client.get("/api/applications/3/documents").json() == []
+
+
 def test_application_patch_fields(client):
     client.put("/api/applications/1", json={"status": "interview"})
     r = client.patch("/api/applications/1", json={"priority": "high", "next_action": "send case",

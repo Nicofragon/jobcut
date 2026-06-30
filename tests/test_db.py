@@ -437,3 +437,97 @@ def test_stage_durations_handles_mixed_naive_and_aware(conn):
     d = db.stage_durations(conn, now="2026-06-21T10:00:00+00:00")
     assert d["1"]["days_in_stage"] == 20 and d["1"]["stalled"] is True
     assert d["2"]["days_in_stage"] == 17 and d["2"]["stalled"] is True
+
+
+# --- v8: application_documents (prep/debrief/study markdown) -----------------
+
+def test_v8_schema_has_documents_table(conn):
+    assert _has_table(conn, "application_documents")
+    assert _schema_version(conn) == "8"
+
+
+def test_document_insert_and_get(conn):
+    d = db.upsert_document(conn, job_id="1", title="R3 prep", body="## Format\n- SQL",
+                           event_id=None, doc_type="prep", now="2026-06-20T10:00:00")
+    assert d["doc_id"] >= 1
+    assert d["created_at"] == "2026-06-20T10:00:00" == d["updated_at"]
+    assert d["archived_at"] is None and d["client_key"] is None
+    got = db.get_document(conn, d["doc_id"])
+    assert got["body"] == "## Format\n- SQL" and got["title"] == "R3 prep"
+    assert db.get_document(conn, 99999) is None
+
+
+def test_document_idempotent_update_by_client_key(conn):
+    a = db.upsert_document(conn, job_id="1", title="Debrief", body="v1",
+                           client_key="preply-r3-debrief", now="2026-06-20T10:00:00")
+    b = db.upsert_document(conn, job_id="1", title="Debrief (edited)", body="v2",
+                           client_key="preply-r3-debrief", now="2026-06-21T09:00:00")
+    assert b["doc_id"] == a["doc_id"]                 # updated in place, no duplicate
+    assert b["body"] == "v2" and b["title"] == "Debrief (edited)"
+    assert b["created_at"] == "2026-06-20T10:00:00"   # preserved
+    assert b["updated_at"] == "2026-06-21T09:00:00"   # bumped
+    assert len(db.get_documents(conn, "1")) == 1
+
+
+def test_document_null_client_key_always_inserts(conn):
+    db.upsert_document(conn, job_id="1", title="A", body="a", now="2026-06-20T10:00:00")
+    db.upsert_document(conn, job_id="1", title="B", body="b", now="2026-06-20T10:00:01")
+    assert len(db.get_documents(conn, "1")) == 2       # NULL key never dedups
+
+
+def test_document_type_coerced_to_known_set(conn):
+    d = db.upsert_document(conn, job_id="1", title="x", body="y", doc_type="wat")
+    assert d["doc_type"] == "other"
+
+
+def test_get_documents_excludes_archived_and_orders_offer_first(conn):
+    # offer-level + event-anchored; archived hidden by default.
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T10:00:00")
+    ev = db.add_event(conn, "1", "interview", body="R3", now="2026-06-10T12:00:00")
+    db.upsert_document(conn, job_id="1", title="event doc", body="b",
+                       event_id=ev["event_id"], now="2026-06-11T10:00:00")
+    offer = db.upsert_document(conn, job_id="1", title="offer doc", body="b",
+                               event_id=None, now="2026-06-12T10:00:00")
+    archived = db.upsert_document(conn, job_id="1", title="old", body="b", now="2026-06-13T10:00:00")
+    db.set_document_archived(conn, archived["doc_id"], now="2026-06-14T10:00:00")
+
+    docs = db.get_documents(conn, "1")
+    assert [d["title"] for d in docs] == ["offer doc", "event doc"]   # offer-level first
+    assert all(d["archived_at"] is None for d in docs)               # archived hidden
+    assert len(db.get_documents(conn, "1", include_archived=True)) == 3
+    assert offer["event_id"] is None
+
+
+def test_document_archive_and_restore(conn):
+    d = db.upsert_document(conn, job_id="1", title="oops", body="b", now="2026-06-20T10:00:00")
+    arc = db.set_document_archived(conn, d["doc_id"], now="2026-06-21T10:00:00")
+    assert arc["archived_at"] == "2026-06-21T10:00:00"
+    assert db.get_documents(conn, "1") == []                          # hidden
+    res = db.set_document_archived(conn, d["doc_id"], archived=False)
+    assert res["archived_at"] is None
+    assert len(db.get_documents(conn, "1")) == 1                      # back
+    assert db.set_document_archived(conn, 99999) is None              # unknown id
+
+
+def test_documents_migration_v7_to_v8(tmp_path):
+    # A pre-v8 DB (v7 schema, no application_documents table) upgrades additively.
+    p = tmp_path / "v7.db"
+    raw = sqlite3.connect(str(p))
+    raw.executescript(
+        'CREATE TABLE jobs ("job_id" TEXT PRIMARY KEY, "title" TEXT, "first_seen" TEXT);'
+        "CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT);"
+        "INSERT INTO jobs(job_id, title, first_seen) VALUES ('1', 'Old Job', '2026-01-01');"
+        "INSERT INTO _meta(key, value) VALUES ('schema_version', '7');"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = db.connect(p)
+    try:
+        assert _schema_version(conn) == str(db.SCHEMA_VERSION) == "8"
+        assert _has_table(conn, "application_documents")
+        assert conn.execute("SELECT title FROM jobs WHERE job_id='1'").fetchone()[0] == "Old Job"
+        d = db.upsert_document(conn, job_id="1", title="t", body="b")
+        assert db.get_document(conn, d["doc_id"])["title"] == "t"
+    finally:
+        conn.close()

@@ -24,6 +24,10 @@ no one writes raw SQL.
   `db.update_application_fields`; ``kind`` in note/interview/next_action →
   `db.add_event`). Lets Claude/Cowork update applications (notes, rounds, status,
   structured fields) through the same db.py choke-points — no raw SQL.
+- `ingest_documents` (prep-docs, `jobcut ingest-documents`): prep/debrief/study markdown
+  attached to an application, optionally anchored to a timeline ``event_id``. Payload is
+  ``{"documents": [...], "archive": [...]}``; idempotent per ``client_key``; raw ids only
+  (the assistant resolves company/title/round agent-side). Read-only in the console.
 
 Invalid items are skipped and reported; the rest are written.
 """
@@ -364,6 +368,108 @@ def ingest_events(path, conn=None) -> dict:
                           "(need status, fields, or kind in note/interview/next_action)")
         return {"written": written, "skipped": len(errors), "errors": errors,
                 "unknown_job_ids": sorted(unknown)}
+    finally:
+        if own:
+            conn.close()
+
+
+# --- prep documents (B-21, prep-docs) ---------------------------------------
+
+def load_documents(data) -> tuple[list[dict], list[dict]]:
+    """Coerce the parsed JSON into (documents, archive_ops).
+
+    Accepts ``{"documents": [...], "archive": [...]}`` or a bare list (treated as
+    ``documents`` with no archive ops). Raises ValueError on a non-list/dict payload.
+    """
+    if isinstance(data, list):
+        return data, []
+    if isinstance(data, dict):
+        docs = data.get("documents", [])
+        arch = data.get("archive", [])
+        if not isinstance(docs, list):
+            docs = []
+        if not isinstance(arch, list):
+            arch = []
+        return docs, arch
+    raise ValueError('expected a JSON list of documents or {"documents": [...], "archive": [...]}')
+
+
+def ingest_documents(path, conn=None) -> dict:
+    """Ingest prep/debrief/study documents and archive ops. Raw ids only — the assistant
+    resolves company/title/round to job_id/event_id agent-side (like jobcut-track), never here.
+
+    Each document needs a non-empty ``job_id``, ``title`` and ``body``. ``doc_type`` is
+    coerced to db.DOC_TYPES; ``client_key`` makes re-ingest idempotent; ``meta`` (dict) is
+    JSON-encoded. A given ``event_id`` must belong to ``job_id`` (else the entry is skipped —
+    never silently mis-link a doc to another offer's round). Archive ops set/clear a doc's
+    soft-delete: ``{"doc_id": N, "restore": false}``. Lenient: skip + report. Returns a summary.
+    """
+    own = conn is None
+    conn = conn or db.connect()
+    try:
+        documents, archive_ops = load_documents(json.loads(Path(path).read_text()))
+        known = {r["job_id"] for r in conn.execute("SELECT job_id FROM jobs").fetchall()}
+        written, archived, errors, unknown = 0, 0, [], set()
+
+        for i, e in enumerate(documents):
+            if not isinstance(e, dict):
+                errors.append(f"document {i}: not an object")
+                continue
+            jid = str(e.get("job_id", "")).strip()
+            if not jid:
+                errors.append(f"document {i}: missing job_id")
+                continue
+            title = str(e.get("title", "") or "").strip()
+            body = str(e.get("body", "") or "")
+            if not title or not body.strip():
+                errors.append(f"document {i} (job {jid}): missing title or body")
+                continue
+            event_id = e.get("event_id")
+            if event_id is not None:
+                try:
+                    event_id = int(event_id)
+                except (TypeError, ValueError):
+                    errors.append(f"document {i} (job {jid}): event_id must be an integer")
+                    continue
+                owns = conn.execute(
+                    "SELECT 1 FROM application_events WHERE event_id = ? AND job_id = ?",
+                    (event_id, jid),
+                ).fetchone()
+                if owns is None:
+                    errors.append(f"document {i} (job {jid}): event_id {event_id} "
+                                  "is not an event of this application")
+                    continue
+            if jid not in known:
+                unknown.add(jid)
+            meta = e.get("meta")
+            meta_s = json.dumps(meta, ensure_ascii=False) if isinstance(meta, dict) else ""
+            db.upsert_document(
+                conn, job_id=jid, title=title, body=body, event_id=event_id,
+                doc_type=str(e.get("doc_type") or "prep"),
+                supersedes_id=e.get("supersedes_id"),
+                client_key=(str(e["client_key"]) if e.get("client_key") else None),
+                meta=meta_s,
+            )
+            written += 1
+
+        for i, op in enumerate(archive_ops):
+            if not isinstance(op, dict) or op.get("doc_id") is None:
+                errors.append(f"archive {i}: missing doc_id")
+                continue
+            try:
+                did = int(op["doc_id"])
+            except (TypeError, ValueError):
+                errors.append(f"archive {i}: doc_id must be an integer")
+                continue
+            restore = bool(op.get("restore"))
+            res = db.set_document_archived(conn, did, archived=not restore)
+            if res is None:
+                errors.append(f"archive {i}: no document with doc_id {did}")
+            else:
+                archived += 1
+
+        return {"written": written, "archived": archived, "skipped": len(errors),
+                "errors": errors, "unknown_job_ids": sorted(unknown)}
     finally:
         if own:
             conn.close()
