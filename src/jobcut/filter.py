@@ -26,20 +26,33 @@ UNSCORED_FIELDS = ["job_id", "title", "company_name", "company_size",
                    "location", "workplace_type", "description"]
 
 
-def unscored(conn) -> list[dict]:
-    """Hireable (route-passed) jobs that have no score yet, with their descriptions.
+def unscored(conn, include_scored: bool = False,
+             ids: list[str] | None = None) -> list[dict]:
+    """Jobs to score, each with its **full** ``description`` (never truncated).
 
     Read-only. Lets an external scorer (a Claude/Cowork skill) read the job text and
     score it against the profile; pair with `jobcut ingest-scores`. No title
-    pre-filter (the scorer judges relevance) and no repost collapse — just the geo
-    funnel minus anything already scored. Returns a list of plain-str dicts.
+    pre-filter (the scorer judges relevance) and no repost collapse. Returns a list
+    of plain-str dicts.
+
+    Three modes feed the three scoring paths (always with full descriptions):
+      - default: geo funnel **minus** anything already scored (new jobs — incremental).
+      - ``include_scored=True``: the whole geo funnel, including already-scored rows
+        (re-score everything).
+      - ``ids=[...]``: exactly those ``job_id``s, regardless of funnel or scored state
+        (targeted re-score of specific roles).
     """
     df = db.read_jobs(conn)
     if df.empty:
         return []
-    df = df[funnel_series(df.location, df.workplace_type)]
-    already = db.scored_ids(conn)
-    df = df[~df.job_id.astype(str).isin(already)]
+    if ids is not None:
+        wanted = {str(i) for i in ids}
+        df = df[df.job_id.astype(str).isin(wanted)]
+    else:
+        df = df[funnel_series(df.location, df.workplace_type)]
+        if not include_scored:
+            already = db.scored_ids(conn)
+            df = df[~df.job_id.astype(str).isin(already)]
     cols = [c for c in UNSCORED_FIELDS if c in df.columns]
     return [{c: ("" if pd.isna(r[c]) else str(r[c])) for c in cols}
             for _, r in df[cols].iterrows()]
