@@ -237,14 +237,23 @@ def cmd_add_job(args) -> int:
 def cmd_unscored(args) -> int:
     """List hireable jobs that still need a score (read-only; for an external scorer)."""
     from . import db, filter as _filter
+    raw_ids = getattr(args, "ids", None)
+    ids = None
+    if raw_ids and raw_ids.strip():
+        ids = [i for i in raw_ids.replace(",", " ").split() if i]
+    include_scored = getattr(args, "include_scored", False)
     conn = db.connect()
     try:
-        rows = _filter.unscored(conn)
+        rows = _filter.unscored(conn, include_scored=include_scored, ids=ids)
     finally:
         conn.close()
     if getattr(args, "json", False):
         import json
         print(json.dumps(rows, ensure_ascii=False, indent=1))
+    elif ids:
+        print(f"unscored · {len(rows)} job(s) for the given ids (use --json for the data)")
+    elif include_scored:
+        print(f"unscored · {len(rows)} hireable funnel job(s) incl. already-scored (use --json for the data)")
     else:
         print(f"unscored · {len(rows)} hireable job(s) without a score (use --json for the data)")
     return 0
@@ -816,6 +825,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     pu = sub.add_parser("unscored", help="list hireable jobs that still need a score (for an external scorer)")
     pu.add_argument("--json", action="store_true", help="print the jobs (with descriptions) as JSON to stdout")
+    pu.add_argument("--include-scored", action="store_true",
+                    help="also include already-scored funnel jobs (for re-scoring with full descriptions)")
+    pu.add_argument("--ids", metavar="ID[,ID...]",
+                    help="only these job_ids (with full descriptions), regardless of scored state — targeted re-score")
     pu.set_defaults(func=cmd_unscored)
 
     psf = sub.add_parser("surface", help="write the ranked shortlist to out/")

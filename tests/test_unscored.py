@@ -65,6 +65,58 @@ def test_unscored_includes_description_and_stable_shape():
     conn.close()
 
 
+def test_unscored_include_scored_keeps_scored_with_description():
+    conn = db.connect()
+    _seed(conn)
+    rows = _filter.unscored(conn, include_scored=True)
+    by_id = {r["job_id"]: r for r in rows}
+    assert "3" in by_id                       # already-scored funnel job now included
+    assert by_id["3"]["description"] == "already scored"  # full text, not dropped
+    assert "2" not in by_id                    # foreign still excluded (still funnel-gated)
+    for r in rows:
+        assert REQUIRED <= set(r)
+        assert all(isinstance(v, str) for v in r.values())
+    conn.close()
+
+
+def test_unscored_ids_returns_exactly_those_with_description():
+    conn = db.connect()
+    _seed(conn)
+    rows = _filter.unscored(conn, ids=["2", "3"])
+    by_id = {r["job_id"]: r for r in rows}
+    assert set(by_id) == {"2", "3"}            # foreign(2) + scored(3), funnel/scored ignored
+    assert by_id["2"]["description"] == "foreign role"
+    assert by_id["3"]["description"] == "already scored"
+    for r in rows:
+        assert REQUIRED <= set(r)
+        assert all(isinstance(v, str) for v in r.values())
+    conn.close()
+
+
+def test_unscored_cli_include_scored_and_ids():
+    conn = db.connect()
+    _seed(conn)
+    conn.close()
+    from jobcut.cli import main
+    import io
+    import contextlib
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["unscored", "--include-scored", "--json"])
+    assert rc == 0
+    out = json.loads(buf.getvalue())
+    assert "3" in {r["job_id"] for r in out}   # scored job surfaced for re-score
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["unscored", "--ids", "1,3", "--json"])
+    assert rc == 0
+    out = json.loads(buf.getvalue())
+    assert {r["job_id"] for r in out} == {"1", "3"}
+    assert all(r["description"] for r in out)  # non-empty descriptions
+
+
 def test_unscored_empty_db_is_empty_list():
     conn = db.connect()
     assert _filter.unscored(conn) == []
