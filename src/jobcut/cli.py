@@ -210,6 +210,41 @@ def cmd_ingest_documents(args) -> int:
     return 0
 
 
+def cmd_import_docs(args) -> int:
+    """Import prep documents from the documents/ drop-folder (B-22). A markdown file with a
+    `jobcut:` frontmatter block is resolved to its application and upserted via the same
+    path as `ingest-documents` (idempotent by client_key). `--dry-run` shows the plan only.
+    """
+    from . import docsinbox, paths
+    root = args.dir or str(paths.documents_dir())
+    docsinbox.ensure_dir(root)
+
+    if getattr(args, "dry_run", False):
+        from . import db
+        conn = db.connect()
+        try:
+            docs, reports = docsinbox.scan(root, conn)
+        finally:
+            conn.close()
+        print(f"import-docs (dry-run) · {len(docs)} document(s) would be written from {root}")
+        for r in reports:
+            if r["status"] == "ignored":
+                continue
+            extra = f" → {r['detail']}" if r.get("detail") else ""
+            print(f"  [{r['status']}] {r['file']}{extra}")
+        return 0
+
+    s = docsinbox.import_dir(root)
+    print(f"import-docs · wrote {s['written']} document(s) from {root}")
+    if s["offer_level"]:
+        print(f"  {s['offer_level']} left offer-level (round not uniquely resolved)")
+    if s["skipped"]:
+        print(f"  skipped {s['skipped']}:")
+        for e in s["errors"]:
+            print(f"  · {e}")
+    return 0
+
+
 def cmd_import_jobs(args) -> int:
     """Upsert scraped job rows from a JSON file (flattened or nested actor format)."""
     from . import ingest
@@ -565,8 +600,42 @@ def cmd_serve(args) -> int:
         import webbrowser
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
 
+    _start_docs_inbox()
+
     uvicorn.run("jobcut.api.app:app", host=args.host, port=args.port, log_level="info")
     return 0
+
+
+def _start_docs_inbox() -> None:
+    """Import the documents/ drop-folder once, then watch it for changes (B-22). Any
+    markdown file with a `jobcut:` frontmatter block is auto-imported into its application,
+    so dropping/editing a file shows up in the console with no CLI call. Best-effort: a
+    failure here never blocks `serve`."""
+    import threading
+    from . import docsinbox, paths
+
+    try:
+        docsinbox.ensure_dir()
+        s = docsinbox.import_dir()
+        bits = []
+        if s["written"]:
+            bits.append(f"imported {s['written']}")
+        if s["offer_level"]:
+            bits.append(f"{s['offer_level']} offer-level")
+        if s["skipped"]:
+            bits.append(f"{s['skipped']} skipped")
+        print(f"  documents: watching {paths.documents_dir()}" + (f" · {', '.join(bits)}" if bits else ""))
+    except Exception as exc:  # noqa: BLE001 — never let the inbox block serve
+        print(f"  documents: inbox import skipped ({exc})")
+        return
+
+    def _log(summary: dict) -> None:
+        if summary["written"] or summary["skipped"]:
+            print(f"  documents: imported {summary['written']}"
+                  + (f", {summary['offer_level']} offer-level" if summary["offer_level"] else "")
+                  + (f", {summary['skipped']} skipped" if summary["skipped"] else ""))
+
+    threading.Thread(target=docsinbox.watch, kwargs={"on_import": _log}, daemon=True).start()
 
 
 def _venv_jobcut_bin():
@@ -829,6 +898,12 @@ def build_parser() -> argparse.ArgumentParser:
     pid.add_argument("json", help='path to JSON: {"documents": [{job_id, title, body, event_id?, doc_type?, '
                                   'client_key?, supersedes_id?, meta?}], "archive"?: [{doc_id, restore?}]}')
     pid.set_defaults(func=cmd_ingest_documents)
+
+    pim = sub.add_parser("import-docs",
+                         help="import prep documents (markdown + jobcut: frontmatter) from the documents/ drop-folder")
+    pim.add_argument("--dir", default=None, help="folder to import from (default: <data_dir>/documents)")
+    pim.add_argument("--dry-run", action="store_true", help="show the resolution plan without writing")
+    pim.set_defaults(func=cmd_import_docs)
 
     pisal = sub.add_parser("ingest-salary",
                            help="upsert salary estimates from a JSON file (e.g. a Claude/Cowork salary skill)")

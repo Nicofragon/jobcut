@@ -23,11 +23,22 @@ it living *with the application* instead of loose in a vault. It lands in the
 `application_documents` table and shows under **"Prep documents"** on that job's detail
 page, grouped offer-level or by interview round.
 
-**CLI-only.** Never write SQL or edit `jobcut.db` directly. The CLI is the single schema
-authority: context comes from `jobcut surface --json`, and the write goes through
-`jobcut ingest-documents`. Document bodies are markdown — they're rendered and sanitised
-by the console, so plain GitHub-flavoured markdown (headings, tables, code, task lists)
-is exactly right; don't add raw HTML.
+There are **two ways in**, and which one you use depends on whether the `jobcut` CLI is
+reachable in your environment:
+
+- **CLI reachable (Claude Code on the user's Mac, a terminal session):** write through
+  `jobcut ingest-documents` — the steps below. The CLI is the single schema authority;
+  never write SQL or edit `jobcut.db` directly.
+- **CLI NOT reachable (e.g. Claude Cowork's sandbox — no `jobcut` on PATH, no DB mounted):**
+  do **not** dead-end with "run this in your terminal". Instead **drop a markdown file with
+  a `jobcut:` frontmatter block into the `documents/` folder of the jobcut install** — the
+  running console auto-imports it (see "The documents/ drop-folder" below). If you can't
+  reach that folder either, that's expected: hand the file to the user to save into
+  `<jobcut-install>/documents/`, and it appears automatically.
+
+Either way, document bodies are markdown — rendered and sanitised by the console, so plain
+GitHub-flavoured markdown (headings, tables, code, task lists) is exactly right; don't add
+raw HTML.
 
 **A document is not a note.** A prep document is *reusable reading material* you'd open
 and read before an interview (STAR stories, a pitch, a study sheet, a debrief writeup) —
@@ -107,6 +118,40 @@ is `scores.match_reasons` — that's the score's "why", owned only by `jobcut-sc
    refreshes the browser and opens the job → **Prep documents** tab. Tell them where it
    landed (offer-level vs which round) in plain language. To open the console, hand off to
    `jobcut-open`.
+
+## The documents/ drop-folder (no-CLI environments)
+
+When you **can't** run `jobcut` (Cowork's sandbox, or any agent without the CLI on PATH),
+use the drop-folder instead of dead-ending. jobcut watches `<jobcut-install>/documents/`:
+any markdown file with a `jobcut:` frontmatter block is auto-imported into its application
+while `jobcut serve` is running (and on the next `serve` / `jobcut import-docs` otherwise).
+
+Write **one `.md` per document**, body below the frontmatter:
+
+````markdown
+---
+jobcut:
+  job_id: "4396360445"          # the offer. Or resolve by company (+ role):
+  company: "Preply"
+  role: "Staff Data Analyst"
+  title: "Opening pitch"        # the document's title (optional; else its H1 / filename)
+  round: "R3"                   # optional — anchor to a round. Or: event_id: 123
+  doc_type: "prep"              # prep | study | debrief | other   (default: prep)
+  client_key: "preply-pitch"    # optional — edit + re-save updates in place (no duplicate)
+---
+# Opening pitch
+
+…full markdown…
+````
+
+- Prefer `job_id` when you know it. Otherwise `company` (+ optional `role`) must match
+  **exactly one** offer or the file is skipped (the importer never mis-links).
+- `round`/`event_id` is optional → offer-level if omitted or not uniquely resolved.
+- Place the file at `<jobcut-install>/documents/` (subfolders are fine, e.g.
+  `documents/preply/pitch.md`). **If your environment can't reach that folder, give the
+  finished `.md` to the user to drop in** — the auto-import does the rest, no terminal.
+- This is the **same write** as `ingest-documents` under the hood (idempotent by
+  `client_key`); it's just the path for when the CLI isn't available.
 
 ## Notes
 

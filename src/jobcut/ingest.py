@@ -404,10 +404,19 @@ def ingest_documents(path, conn=None) -> dict:
     never silently mis-link a doc to another offer's round). Archive ops set/clear a doc's
     soft-delete: ``{"doc_id": N, "restore": false}``. Lenient: skip + report. Returns a summary.
     """
+    return ingest_documents_data(json.loads(Path(path).read_text()), conn)
+
+
+def ingest_documents_data(data, conn=None) -> dict:
+    """Core of `ingest_documents`, but from already-parsed data (a list or
+    ``{"documents": [...], "archive": [...]}``) instead of a file path. Lets in-process
+    callers — the docs-inbox importer (`docsinbox`) — reuse the exact same validation,
+    idempotency and reporting without round-tripping through a temp JSON file.
+    """
     own = conn is None
     conn = conn or db.connect()
     try:
-        documents, archive_ops = load_documents(json.loads(Path(path).read_text()))
+        documents, archive_ops = load_documents(data)
         known = {r["job_id"] for r in conn.execute("SELECT job_id FROM jobs").fetchall()}
         written, archived, errors, unknown = 0, 0, [], set()
 
