@@ -34,6 +34,12 @@ activity" and corrupts the score's "why" line. When in doubt: did the user tell 
 something that happened? → note here. Are you explaining a score? → that's
 `jobcut-score`, not this skill.
 
+**A note is not a document, either.** A short thing that happened ("recruiter called",
+"rejected after R2") is a **note** and belongs here. A long doc you'd *re-read* —
+interview prep, a pitch, STAR stories, a study sheet, a post-round debrief — is an
+**application document**: that goes to `jobcut-docs` (`ingest-documents`) and shows under
+"Prep documents", not "Notes & activity". Don't cram a whole prep doc into a note body.
+
 ## Preconditions
 
 - `jobcut` is installed and on PATH (`jobcut --help` works).

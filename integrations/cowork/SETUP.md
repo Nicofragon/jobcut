@@ -21,6 +21,7 @@ Ten skills (each a folder under [`skills/`](skills/)):
 | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Score (or re-score) jobs already in the DB with Claude, written straight back via `ingest-scores` — no Apify, no manual JSON |
 | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** What to apply to (top 10), pipeline/weekly stats (`stats --json`), or open the web console (`serve --open`) |
 | [`jobcut-track`](skills/jobcut-track/SKILL.md) | **Write.** Update an application from chat — note, interview round, status, or fields — written back via `ingest-events` |
+| [`jobcut-docs`](skills/jobcut-docs/SKILL.md) | **Write.** Save a prep/study/debrief **document** (markdown) into an application — shows under "Prep documents" — via `ingest-documents` |
 | [`jobcut-add`](skills/jobcut-add/SKILL.md) | **Write.** Paste a job URL → Claude fetches it, extracts company/title/location, and saves the job (optionally as an application) via `add-job` |
 | [`jobcut-open`](skills/jobcut-open/SKILL.md) | Start the web console from chat (background) and hand back the URL — no terminal |
 | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile (`market --json`) |
@@ -74,8 +75,8 @@ after importing, the skills appear under Personalizar — no reload needed. Then
 **"trabajemos en mi búsqueda de empleo con jobcut"** / **"is jobcut ready?"** to have
 the front door verify everything and route you.
 
-> A single zip with all nine skills does **not** work — Cowork's uploader takes one
-> skill (one `SKILL.md`) per file. Upload the nine individually.
+> A single zip with all the skills does **not** work — Cowork's uploader takes one
+> skill (one `SKILL.md`) per file. Upload each one individually.
 
 ## 4. Configure the data dir
 

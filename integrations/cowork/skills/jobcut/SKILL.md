@@ -41,7 +41,8 @@ check what you can actually see and run:
 1. **The jobcut skills are loaded.** Look at the skills available to you in this
    session and confirm these are present:
    `jobcut-daily`, `jobcut-score`, `jobcut-review`, `jobcut-track`, `jobcut-add`,
-   `jobcut-open`, `jobcut-market`, `jobcut-update`, `jobcut-salary` (plus this one, `jobcut`).
+   `jobcut-open`, `jobcut-market`, `jobcut-update`, `jobcut-salary`, `jobcut-docs`
+   (plus this one, `jobcut`).
 2. **The CLI is installed and on PATH:**
    ```
    jobcut --help
@@ -91,6 +92,7 @@ Report which specific thing failed and which is fine — "8/9 skills loaded,
 | Score / re-score jobs already in the DB with Claude | `jobcut-score` |
 | Know what to apply to, see the pipeline/weekly stats (read-only) | `jobcut-review` |
 | Record something on an application — note, interview round, status, a field | `jobcut-track` |
+| Save a prep/study/debrief **document** into an application (shows under "Prep documents") | `jobcut-docs` |
 | Add a job from a URL (company site / Lever / Greenhouse / expired post) | `jobcut-add` |
 | Open / launch the web console | `jobcut-open` |
 | See market demand vs their skill gaps | `jobcut-market` |
@@ -108,6 +110,7 @@ what the user is recording** — this is the distinction that's been gotten wron
 | The user wants to record… | Goes into | Through | Shows up as |
 |---|---|---|---|
 | Something that happened / a reminder ("previous rejection", "recruiter called") | a **note** timeline event | `jobcut-track` → `ingest-events` (`kind:"note"`) | "Notes & activity" |
+| A long doc to re-read (interview prep, pitch, STAR stories, study sheet, debrief) | an **application document** | `jobcut-docs` → `ingest-documents` | "Prep documents" |
 | An interview round | an **interview** event | `jobcut-track` (`kind:"interview"`, `meta.stage`/`index`, `date`) | timeline + process timing |
 | Pipeline status (applied / interview / offer / rejected …) | `applications.status` | `jobcut-track` (`status`) | the funnel + status badge |
 | A field (priority, next action, contact, cv_version) | `applications.*` | `jobcut-track` (`fields`) | tracker fields |
