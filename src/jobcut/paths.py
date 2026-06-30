@@ -34,6 +34,14 @@ def config_dir() -> Path:
     return data_dir() / "config"
 
 
+def documents_dir() -> Path:
+    """Drop-folder for prep documents (B-22). A markdown file with a ``jobcut:``
+    frontmatter block left here is auto-imported into its application by `jobcut serve`
+    (or `jobcut import-docs`). Lives under the data dir so it ships with the install and
+    works for any user out of the box — never the vault, never iCloud."""
+    return data_dir() / "documents"
+
+
 def out_dir() -> Path:
     """Directory for human/dashboard outputs (Markdown/CSV/HTML). Created on demand."""
     d = data_dir() / "out"
