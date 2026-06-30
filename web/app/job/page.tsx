@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addEvent,
   advanceProcess,
@@ -176,6 +176,8 @@ function JobDetailView() {
   const [timing, setTiming] = useState<ProcessTiming>(null);
   // B-18: the description reads occasionally, so it's collapsed by default when long.
   const [descOpen, setDescOpen] = useState(false);
+  // prep-docs: Overview (funnel + notes) vs Prep documents (full-width reader).
+  const [view, setView] = useState<"overview" | "prep">("overview");
 
   const load = useCallback(() => {
     if (!id) return;
@@ -228,17 +230,9 @@ function JobDetailView() {
   const terminalColor = terminal ? CATEGORY_COLOR[terminal] : null;
   const accent = terminal && terminalColor ? terminalColor : "var(--color-primary)";
 
-  // Prep documents: offer-level (event_id null) shown in their own panel; the rest hang
-  // off the timeline event they're anchored to (D2).
-  const offerDocs = documents.filter((d) => d.event_id == null);
-  const docsByEvent = new Map<number, AppDocument[]>();
-  for (const d of documents) {
-    if (d.event_id != null) {
-      const list = docsByEvent.get(d.event_id) ?? [];
-      list.push(d);
-      docsByEvent.set(d.event_id, list);
-    }
-  }
+  // Prep documents live in their own full-width "Prep documents" view (the index + reader),
+  // grouped by stage there — never mixed into the timeline. This is just the tab count.
+  const prepDocCount = documents.length;
 
   async function setStep(next: string) {
     setLocalStatus(next); // optimistic
@@ -442,6 +436,12 @@ function JobDetailView() {
         </div>
       </div>
 
+      {/* view switch — only when there are prep documents to read */}
+      {prepDocCount > 0 && <ViewTabs view={view} onChange={setView} prepCount={prepDocCount} />}
+
+      {view === "prep" && prepDocCount > 0 ? (
+        <PrepDocsView documents={documents} events={events} />
+      ) : (
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* left: actionable first — interview process, notes, then the long description */}
         <div className="space-y-8 lg:col-span-2">
@@ -588,16 +588,6 @@ function JobDetailView() {
             );
           })()}
 
-          {offerDocs.length > 0 && (
-            <Panel title="Prep documents">
-              <div className="space-y-2">
-                {offerDocs.map((d) => (
-                  <DocCard key={d.doc_id} doc={d} />
-                ))}
-              </div>
-            </Panel>
-          )}
-
           <Panel title="Notes & activity">
             <div className="space-y-3">
               <textarea
@@ -629,7 +619,7 @@ function JobDetailView() {
               ) : (
                 <ul className="space-y-4">
                   {events.map((e) => (
-                    <TimelineRow key={e.event_id} e={e} docs={docsByEvent.get(e.event_id) ?? []} />
+                    <TimelineRow key={e.event_id} e={e} />
                   ))}
                 </ul>
               )}
@@ -744,6 +734,7 @@ function JobDetailView() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -788,7 +779,7 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
   );
 }
 
-function TimelineRow({ e, docs = [] }: { e: AppEvent; docs?: AppDocument[] }) {
+function TimelineRow({ e }: { e: AppEvent }) {
   const dot = EVENT_DOT[e.kind] ?? "#64748b";
   const isNote = e.kind === "note";
   return (
@@ -803,20 +794,11 @@ function TimelineRow({ e, docs = [] }: { e: AppEvent; docs?: AppDocument[] }) {
           {eventLabel(e)}
         </p>
         <p className="mt-0.5 text-xs text-on-surface-faint">{fmtEventWhen(e)}</p>
-        {docs.length > 0 && (
-          <div className="mt-2 space-y-2">
-            {docs.map((d) => (
-              <DocCard key={d.doc_id} doc={d} />
-            ))}
-          </div>
-        )}
       </div>
     </li>
   );
 }
 
-// A document shown as a collapsible card: title + type label, expanding in place to the
-// sanitised markdown body. The list endpoint already carries the body, so opening is local.
 const DOC_TYPE_LABEL: Record<string, string> = {
   prep: "Prep",
   debrief: "Debrief",
@@ -824,30 +806,223 @@ const DOC_TYPE_LABEL: Record<string, string> = {
   other: "Doc",
 };
 
-function DocCard({ doc }: { doc: AppDocument }) {
-  const [open, setOpen] = useState(false);
+// Segmented control switching the body between the Overview (funnel + notes) and the
+// full-width Prep documents reader.
+function ViewTabs({
+  view,
+  onChange,
+  prepCount,
+}: {
+  view: "overview" | "prep";
+  onChange: (v: "overview" | "prep") => void;
+  prepCount: number;
+}) {
+  const tabs: { key: "overview" | "prep"; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "prep", label: "Prep documents" },
+  ];
   return (
-    <div className="overflow-hidden rounded-lg border border-border/60 bg-surface-alt">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-sunken"
-      >
-        <span className="shrink-0 text-on-surface-faint">
-          <Icon name="file-text" size={16} />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-on-surface">{doc.title}</span>
-        <span className="shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] font-semibold text-on-surface-variant">
-          {DOC_TYPE_LABEL[doc.doc_type] ?? "Doc"}
-        </span>
-        <span className="shrink-0 text-on-surface-faint">
-          <Icon name="chevron-right" size={16} className={`transition-transform ${open ? "rotate-90" : ""}`} />
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-border/60 bg-surface px-4 py-3">
-          <DocumentViewer body={doc.body} />
+    <div className="flex w-fit items-center gap-1 rounded-full border border-border/60 bg-surface p-1">
+      {tabs.map((t) => {
+        const active = view === t.key;
+        return (
+          <button
+            key={t.key}
+            onClick={() => onChange(t.key)}
+            className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              active ? "bg-primary text-on-primary" : "text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            {t.label}
+            {t.key === "prep" && (
+              <span
+                className={`rounded-full px-1.5 text-[11px] font-semibold ${
+                  active ? "bg-on-primary/20 text-on-primary" : "bg-surface-sunken text-on-surface-faint"
+                }`}
+              >
+                {prepCount}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+type DocGroup = { key: string; label: string; docs: AppDocument[] };
+
+// Group documents for the index: offer-level first, then by the timeline event (round) they
+// anchor to, ordered chronologically. The round label is the event's own body ("R3 · …").
+function buildDocGroups(documents: AppDocument[], events: AppEvent[]): DocGroup[] {
+  const evById = new Map(events.map((e) => [e.event_id, e]));
+  const offer = documents.filter((d) => d.event_id == null);
+  const byEvent = new Map<number, AppDocument[]>();
+  for (const d of documents) {
+    if (d.event_id != null) {
+      const list = byEvent.get(d.event_id) ?? [];
+      list.push(d);
+      byEvent.set(d.event_id, list);
+    }
+  }
+  const eventGroups = [...byEvent.entries()]
+    .map(([eid, docs]) => {
+      const e = evById.get(eid);
+      return { key: `ev${eid}`, label: e?.body || "Round", order: e ? Date.parse(e.ts) : 0, docs };
+    })
+    .sort((a, b) => a.order - b.order);
+  const groups: DocGroup[] = [];
+  if (offer.length) groups.push({ key: "offer", label: "Offer-level", docs: offer });
+  for (const g of eventGroups) groups.push({ key: g.key, label: g.label, docs: g.docs });
+  return groups;
+}
+
+type TocEntry = { id: string; text: string; level: number };
+
+// Full-width prep-documents reader: a stage-grouped index (collapsible) + a wide reading
+// pane + an auto "On this page" TOC built from the rendered headings (rehype-slug ids).
+function PrepDocsView({ documents, events }: { documents: AppDocument[]; events: AppEvent[] }) {
+  const groups = useMemo(() => buildDocGroups(documents, events), [documents, events]);
+  const allIds = useMemo(() => groups.flatMap((g) => g.docs.map((d) => d.doc_id)), [groups]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [indexOpen, setIndexOpen] = useState(true);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const readerRef = useRef<HTMLDivElement>(null);
+  const [toc, setToc] = useState<TocEntry[]>([]);
+
+  // Derive the active doc instead of storing (and effect-correcting) a possibly-stale id:
+  // the selection falls back to the first doc when unset or no longer present (re-ingest).
+  const activeId = selectedId != null && allIds.includes(selectedId) ? selectedId : allIds[0] ?? null;
+  const active = documents.find((d) => d.doc_id === activeId) ?? null;
+
+  // Build the in-doc TOC from the rendered headings (ids come from rehype-slug, so they
+  // match exactly). Reading the DOM avoids re-implementing the slug algorithm.
+  useEffect(() => {
+    const root = bodyRef.current;
+    if (!root) {
+      setToc([]);
+      return;
+    }
+    const hs = Array.from(root.querySelectorAll<HTMLElement>(".md-doc h1, .md-doc h2, .md-doc h3"));
+    setToc(
+      hs
+        .filter((h) => h.id)
+        .map((h) => ({ id: h.id, text: h.textContent ?? "", level: Number(h.tagName[1]) }))
+    );
+  }, [activeId, active?.body]);
+
+  function select(docId: number) {
+    setSelectedId(docId);
+    readerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  if (!active) return null;
+  const typeMeta = `${DOC_TYPE_LABEL[active.doc_type] ?? "Doc"}${
+    active.updated_at ? ` · updated ${fmtDate(active.updated_at)}` : ""
+  }`;
+
+  return (
+    <div className="flex flex-col gap-6 lg:flex-row">
+      {/* stage index */}
+      {indexOpen && (
+        <aside className="lg:w-72 lg:shrink-0">
+          <div className="lg:sticky lg:top-6 rounded-card border border-border/40 bg-surface p-3 shadow-card">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-on-surface-faint">
+                Documents
+              </span>
+              <button
+                onClick={() => setIndexOpen(false)}
+                title="Hide index"
+                aria-label="Hide index"
+                className="rounded p-1 text-on-surface-faint transition-colors hover:bg-surface-sunken hover:text-on-surface"
+              >
+                <Icon name="panel-left" size={16} />
+              </button>
+            </div>
+            <nav className="space-y-3">
+              {groups.map((g) => (
+                <div key={g.key}>
+                  <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                    {g.label} <span className="text-on-surface-faint">· {g.docs.length}</span>
+                  </p>
+                  <ul className="space-y-0.5">
+                    {g.docs.map((d) => {
+                      const isActive = d.doc_id === activeId;
+                      return (
+                        <li key={d.doc_id}>
+                          <button
+                            onClick={() => select(d.doc_id)}
+                            className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
+                              isActive
+                                ? "bg-primary-tint font-medium text-primary-strong"
+                                : "text-on-surface-variant hover:bg-surface-sunken"
+                            }`}
+                          >
+                            <Icon name="file-text" size={15} className="shrink-0" />
+                            <span className="min-w-0 flex-1 truncate">{d.title}</span>
+                            <span className="shrink-0 text-[10px] font-semibold uppercase text-on-surface-faint">
+                              {DOC_TYPE_LABEL[d.doc_type] ?? "Doc"}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </nav>
+          </div>
+        </aside>
+      )}
+
+      {/* reader */}
+      <article ref={readerRef} className="min-w-0 flex-1 scroll-mt-6">
+        <div className="rounded-card border border-border/40 bg-surface shadow-card">
+          <header className="flex items-center gap-3 border-b border-border/60 px-5 py-4 lg:px-8">
+            {!indexOpen && (
+              <button
+                onClick={() => setIndexOpen(true)}
+                title="Show index"
+                aria-label="Show index"
+                className="shrink-0 rounded-lg border border-border p-1.5 text-on-surface-faint transition-colors hover:text-on-surface"
+              >
+                <Icon name="panel-left" size={16} />
+              </button>
+            )}
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-lg font-semibold text-on-surface">{active.title}</h2>
+              <p className="mt-0.5 text-xs text-on-surface-faint">{typeMeta}</p>
+            </div>
+          </header>
+          <div ref={bodyRef} className="px-5 py-6 lg:px-10 lg:py-8">
+            <DocumentViewer key={active.doc_id} body={active.body} />
+          </div>
         </div>
+      </article>
+
+      {/* in-doc TOC — only when the doc has enough headings to be worth navigating */}
+      {toc.length > 2 && (
+        <aside className="hidden xl:block xl:w-56 xl:shrink-0">
+          <div className="xl:sticky xl:top-6">
+            <p className="mb-2 flex items-center gap-1.5 px-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-faint">
+              <Icon name="list" size={14} /> On this page
+            </p>
+            <ul className="space-y-0.5 border-l border-border">
+              {toc.map((h, i) => (
+                <li key={`${h.id}-${i}`}>
+                  <button
+                    onClick={() => document.getElementById(h.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    style={{ paddingLeft: `${(h.level - 1) * 0.75 + 0.75}rem` }}
+                    className="-ml-px block w-full truncate border-l border-transparent py-1 pr-2 text-left text-xs text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+                  >
+                    {h.text}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
       )}
     </div>
   );
