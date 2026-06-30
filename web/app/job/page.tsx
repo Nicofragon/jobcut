@@ -877,39 +877,18 @@ function buildDocGroups(documents: AppDocument[], events: AppEvent[]): DocGroup[
   return groups;
 }
 
-type TocEntry = { id: string; text: string; level: number };
-
-// Full-width prep-documents reader: a stage-grouped index (collapsible) + a wide reading
-// pane + an auto "On this page" TOC built from the rendered headings (rehype-slug ids).
+// Full-width prep-documents reader: a stage-grouped, collapsible index + a wide reading pane.
 function PrepDocsView({ documents, events }: { documents: AppDocument[]; events: AppEvent[] }) {
   const groups = useMemo(() => buildDocGroups(documents, events), [documents, events]);
   const allIds = useMemo(() => groups.flatMap((g) => g.docs.map((d) => d.doc_id)), [groups]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [indexOpen, setIndexOpen] = useState(true);
-  const bodyRef = useRef<HTMLDivElement>(null);
   const readerRef = useRef<HTMLDivElement>(null);
-  const [toc, setToc] = useState<TocEntry[]>([]);
 
   // Derive the active doc instead of storing (and effect-correcting) a possibly-stale id:
   // the selection falls back to the first doc when unset or no longer present (re-ingest).
   const activeId = selectedId != null && allIds.includes(selectedId) ? selectedId : allIds[0] ?? null;
   const active = documents.find((d) => d.doc_id === activeId) ?? null;
-
-  // Build the in-doc TOC from the rendered headings (ids come from rehype-slug, so they
-  // match exactly). Reading the DOM avoids re-implementing the slug algorithm.
-  useEffect(() => {
-    const root = bodyRef.current;
-    if (!root) {
-      setToc([]);
-      return;
-    }
-    const hs = Array.from(root.querySelectorAll<HTMLElement>(".md-doc h1, .md-doc h2, .md-doc h3"));
-    setToc(
-      hs
-        .filter((h) => h.id)
-        .map((h) => ({ id: h.id, text: h.textContent ?? "", level: Number(h.tagName[1]) }))
-    );
-  }, [activeId, active?.body]);
 
   function select(docId: number) {
     setSelectedId(docId);
@@ -995,35 +974,11 @@ function PrepDocsView({ documents, events }: { documents: AppDocument[]; events:
               <p className="mt-0.5 text-xs text-on-surface-faint">{typeMeta}</p>
             </div>
           </header>
-          <div ref={bodyRef} className="px-5 py-6 lg:px-10 lg:py-8">
+          <div className="px-5 py-6 lg:px-10 lg:py-8">
             <DocumentViewer key={active.doc_id} body={active.body} />
           </div>
         </div>
       </article>
-
-      {/* in-doc TOC — only when the doc has enough headings to be worth navigating */}
-      {toc.length > 2 && (
-        <aside className="hidden xl:block xl:w-56 xl:shrink-0">
-          <div className="xl:sticky xl:top-6">
-            <p className="mb-2 flex items-center gap-1.5 px-2 text-[11px] font-semibold uppercase tracking-wide text-on-surface-faint">
-              <Icon name="list" size={14} /> On this page
-            </p>
-            <ul className="space-y-0.5 border-l border-border">
-              {toc.map((h, i) => (
-                <li key={`${h.id}-${i}`}>
-                  <button
-                    onClick={() => document.getElementById(h.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    style={{ paddingLeft: `${(h.level - 1) * 0.75 + 0.75}rem` }}
-                    className="-ml-px block w-full truncate border-l border-transparent py-1 pr-2 text-left text-xs text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
-                  >
-                    {h.text}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </aside>
-      )}
     </div>
   );
 }
