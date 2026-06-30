@@ -17,9 +17,18 @@ scores **directly back** — all through the `jobcut` CLI. The user does nothing
 beyond asking.
 
 **CLI-only.** Never write SQL or edit `jobcut.db` directly. The CLI is the single
-schema authority: reads go through `jobcut unscored --json` / `jobcut surface
---json`, the write goes through `jobcut ingest-scores`. This keeps the DB valid
-and is just as direct.
+schema authority: reads for scoring go through `jobcut unscored --json` (it returns
+the **full** `description`), the write goes through `jobcut ingest-scores`. This
+keeps the DB valid and is just as direct.
+
+**Score against the full `description`, always.** Every score must be based on the
+complete job description, never the title, metadata, or a truncated snippet — titles
+mislead (a "Data Analyst" posting can be an Analytics-Engineering role; a "Data
+Analytics Analyst" can be SAS-required data QA; a whole batch can be a training
+*program*, not jobs). If a description is long, read it in batches, but read all of
+it. **Never source the text to score from `jobcut surface --json`** — `surface`
+deliberately drops `description` (it's the shortlist/report view). Use `unscored`
+for scoring; `surface` is only for the final report in step 6.
 
 ## Preconditions
 
@@ -33,18 +42,26 @@ and is just as direct.
 
 ## Steps
 
-1. **Get the jobs to score.**
+1. **Get the jobs to score.** All three paths use `unscored`, so you always get the
+   **full `description`** (ingest upserts by `job_id`, so re-ingesting overwrites a
+   score):
    - Default (incremental — new/unscored jobs only):
      ```
      jobcut unscored --json > tmp/to_score.json
      ```
      Returns hireable jobs without a score yet, each with its `description`.
-   - Re-score request ("re-score everything / these roles"): pull the current
-     shortlist instead and score those `job_id`s (ingest upserts, so re-ingesting an
-     existing `job_id` overwrites its score):
+   - Re-score everything ("re-score all my jobs"): the whole funnel, including
+     already-scored rows:
      ```
-     jobcut surface --json
+     jobcut unscored --include-scored --json > tmp/to_score.json
      ```
+   - Re-score specific roles ("re-score these"): exactly those ids, regardless of
+     funnel or scored state:
+     ```
+     jobcut unscored --ids <id1,id2> --json > tmp/to_score.json
+     ```
+   - Do **not** use `jobcut surface --json` here — it drops `description`; it's only
+     for the final report (step 6).
    - If the list is empty, tell the user there's nothing to score and stop.
 
 2. **Read the profile**: read `profile.md` from the data dir. Note target roles,
@@ -82,7 +99,9 @@ and is just as direct.
 
 ## Notes
 
-- Read-only commands: `jobcut unscored --json`, `jobcut surface --json`. The only
+- Read-only commands: `jobcut unscored --json` (with `--include-scored` for a full
+  re-score, or `--ids <id1,id2>` for a targeted re-score — both return full
+  descriptions) and `jobcut surface --json` (report view, no descriptions). The only
   writer is `jobcut ingest-scores`. No raw SQL, ever.
 - **`match_reasons` is the *scoring rationale* — yours alone.** It explains *why a job
   scored what it did* ("BI Analyst +25; Madrid híbrido +15; …") and is written **only**
