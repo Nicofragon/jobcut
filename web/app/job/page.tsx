@@ -853,9 +853,19 @@ function ViewTabs({
 type DocGroup = { key: string; label: string; docs: AppDocument[] };
 
 // Group documents for the index: offer-level first, then by the timeline event (round) they
-// anchor to, ordered chronologically. The round label is the event's own body ("R3 · …").
+// anchor to, ordered chronologically. The round label is the event's own body ("R3 · …") when
+// it has one; otherwise it falls back to an ordinal + date ("Round 2 · 15 jun 2026") derived
+// from the event's position among the application's interview rounds — so unlabelled rounds
+// (the common case) still read as distinct stages instead of a row of bare "Round"s.
 function buildDocGroups(documents: AppDocument[], events: AppEvent[]): DocGroup[] {
   const evById = new Map(events.map((e) => [e.event_id, e]));
+  // 1-based position of each interview event among all interview rounds, by date.
+  const ordinal = new Map<number, number>();
+  events
+    .filter((e) => e.kind === "interview")
+    .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts))
+    .forEach((e, i) => ordinal.set(e.event_id, i + 1));
+
   const offer = documents.filter((d) => d.event_id == null);
   const byEvent = new Map<number, AppDocument[]>();
   for (const d of documents) {
@@ -868,7 +878,11 @@ function buildDocGroups(documents: AppDocument[], events: AppEvent[]): DocGroup[
   const eventGroups = [...byEvent.entries()]
     .map(([eid, docs]) => {
       const e = evById.get(eid);
-      return { key: `ev${eid}`, label: e?.body || "Round", order: e ? Date.parse(e.ts) : 0, docs };
+      const body = (e?.body ?? "").trim();
+      const ord = e ? ordinal.get(e.event_id) : undefined;
+      const date = e ? fmtDate(e.ts) : null;
+      const label = body || (ord ? `Round ${ord}${date ? ` · ${date}` : ""}` : "Round");
+      return { key: `ev${eid}`, label, order: e ? Date.parse(e.ts) : 0, docs };
     })
     .sort((a, b) => a.order - b.order);
   const groups: DocGroup[] = [];
@@ -922,8 +936,9 @@ function PrepDocsView({ documents, events }: { documents: AppDocument[]; events:
             <nav className="space-y-3">
               {groups.map((g) => (
                 <div key={g.key}>
-                  <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
-                    {g.label} <span className="text-on-surface-faint">· {g.docs.length}</span>
+                  <p className="flex items-baseline justify-between gap-2 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                    <span className="min-w-0 truncate">{g.label}</span>
+                    <span className="shrink-0 font-normal text-on-surface-faint">{g.docs.length}</span>
                   </p>
                   <ul className="space-y-0.5">
                     {g.docs.map((d) => {
