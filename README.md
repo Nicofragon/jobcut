@@ -12,10 +12,11 @@ Because it never deletes rows, it also doubles as your own **market dataset**:
 which skills are in demand, where, and how that shifts over weeks.
 
 > ⚠️ **Status: pre-release.** The pipeline works end to end and ships a local
-> **web console** (Next.js) over a thin **FastAPI** bridge — onboarding, a daily
-> shortlist, an application tracker (status, interview rounds/stages, a pipeline funnel),
-> searches, profile and market gaps — launched with a single `jobcut serve`. Not yet on
-> PyPI; install from this repo with `pip install -e .`.
+> **web console** (Next.js, light **and** dark) over a thin **FastAPI** bridge —
+> onboarding, a daily shortlist, an application tracker (status, interview rounds/stages,
+> a pipeline funnel, salary bands, prep documents), searches, profile and market gaps —
+> launched with a single `jobcut serve`, and updatable in-app. Not yet on PyPI; install
+> from this repo with `pip install -e .`.
 
 ---
 
@@ -121,6 +122,9 @@ Everything lives in your **data dir** (the current directory, or `$JOBCUT_DATA_D
 - **`config/taxonomy.json`** — skills (regex + your have/partial/gap status) for the market report.
 - **`searches/*.json`** — one file per saved search = the Apify actor's input. Your real
   ones are git-ignored; ship/keep `example-*.json` as samples.
+- **`documents/`** — drop a markdown file with a `jobcut:` frontmatter block here and
+  `jobcut serve` auto-imports it as a **prep document** attached to the matching role
+  (study notes, interview debriefs). Editing the file updates the doc in place.
 
 ### Scoring rubric (`rule_based`, the default)
 
@@ -142,9 +146,10 @@ All of the above — `include_titles`, skill patterns, `signals`, `dealbreakers`
 jobcut ships skills so Claude (Cowork / Claude Code) can drive it for you — through
 the `jobcut` CLI, never raw SQL. Ask Claude to **run your daily search**, **score
 jobs**, tell you **what to apply to / how your pipeline is doing**, **update an
-application** (notes, interview rounds, status), **add a job from a URL**, **open the
-console**, **summarize the market**, or **update the app**. Setup and the full skill
-list are in [`integrations/cowork/`](integrations/cowork/README.md).
+application** (notes, interview rounds, status), **save prep documents** (study notes,
+interview debriefs) into a role, **add a job from a URL**, **open the console**,
+**summarize the market**, or **update the app**. Setup and the full skill list are in
+[`integrations/cowork/`](integrations/cowork/README.md).
 
 | Ask Claude… | Skill |
 |-------------|-------|
@@ -153,6 +158,7 @@ list are in [`integrations/cowork/`](integrations/cowork/README.md).
 | "score my jobs with Claude" | `jobcut-score` |
 | "what should I apply to? / how's my pipeline?" | `jobcut-review` |
 | "Preply passed to R3 / add a note to Kiwi / mark Acme rejected" | `jobcut-track` |
+| "save this prep doc / study notes / interview debrief into the Preply app" | `jobcut-docs` |
 | "add this job &lt;url&gt; / I applied to this Lever role" | `jobcut-add` |
 | "open jobcut / abrí jobcut" | `jobcut-open` |
 | "what's the market asking for?" | `jobcut-market` |

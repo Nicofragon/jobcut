@@ -253,6 +253,31 @@ jobcut add-job --url <posting-url> --company "Acme" --title "Data Analyst" --app
 The console's **"+ Add application"** form (`POST /applications/manual`) and the
 `jobcut-add` Cowork skill ("add this job: <url>") do the same thing.
 
+### Prep documents — study notes & interview debriefs
+
+Once a role is live in your pipeline you accumulate prep material: research
+notes, answers to practice questions, a post-interview debrief. jobcut stores
+these as **prep documents** attached to the application (the
+`application_documents` table), rendered on the role's detail page under a
+**"Prep documents"** tab — markdown, sanitized, grouped by interview stage
+(Offer-level / R1 / R2 / …). Two ways in, both idempotent (re-saving updates
+the doc in place by a stable `client_key`):
+
+- **Drop a file** — put a markdown file with a `jobcut:` frontmatter block into
+  `<data-dir>/documents/`. `jobcut serve` imports it on startup and watches the
+  folder, so it appears in the console with no command. `jobcut import-docs`
+  runs the same import by hand (`--dry-run` to preview).
+- **A Claude skill / the CLI** — the `jobcut-docs` Cowork skill ("save these
+  study notes into the Preply app") writes through `jobcut ingest-documents`.
+
+### Salary bands
+
+Where a posting discloses pay, the detail page shows it — from the structured
+`salary_*` fields, or parsed out of the description body when LinkedIn left the
+fields empty (`salary_listing`). Where it discloses **nothing**, Claude/Cowork
+can estimate a band (the `jobcut-salary` skill → `jobcut ingest-salary`), shown
+as an *estimate* chip. Precedence: structured > disclosed-in-text > estimate.
+
 ---
 
 ## 5. The dashboard · [dashboard/app.py](../dashboard/app.py)
