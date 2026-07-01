@@ -1,8 +1,8 @@
 # jobcut — Manual de usuario
 
 > Cómo funciona toda la plataforma, de punta a punta: el motor (pipeline Python +
-> SQLite), el puente FastAPI, el console Next.js, el dashboard Streamlit "lite", y
-> cada paso del flujo diario. Versión: post-Fase 2.
+> SQLite), el puente FastAPI, el console Next.js (claro **y** oscuro), el dashboard
+> Streamlit "lite", y cada paso del flujo diario. Versión: 0.1.0 (schema v8).
 
 ## Índice
 
@@ -109,6 +109,7 @@ Todo lo tuyo vive en el **data dir** = `$JOBCUT_DATA_DIR` si está seteado, o el
 │   ├── config.json         # routing, filtro de títulos, pesos de scoring (overrides)
 │   └── taxonomy.json       # skills (regex + estado have/partial/gap) + role_segments
 ├── searches/*.json         # una búsqueda guardada por archivo (input del actor Apify)
+├── documents/              # drop-folder de prep-docs: .md con frontmatter `jobcut:` → auto-import
 ├── out/                    # exports: shortlist.md/csv, market-gaps.md, dashboard.json…
 ├── last_runs.json          # punteros al último run de Apify (para `pull --read`)
 └── market_history.xlsx     # snapshot de demanda de skills por fecha
@@ -198,7 +199,7 @@ hace el score — ambos con progreso en vivo (SSE).
 
 ## 7. El modelo de datos (SQLite)
 
-Tablas (`schema_version = 6`):
+Tablas (`schema_version = 8`):
 
 **`jobs`** — el acumulador madre, 1 fila por `job_id` (PK). ~32 columnas que reflejan el
 payload aplanado: `title, company_name, location, workplace_type, applicants,
@@ -227,6 +228,19 @@ aplicación: `kind ∈ status_change | note | interview | next_action`, con `bod
 y fecha. Es la fuente del historial ("notes & activity") y del funnel acumulado
 ("¿alguna vez llegó a entrevista?"). `jobcut backfill-events` siembra el
 `status_change` inicial para apps importadas antes del timeline.
+
+**`salary_estimates`** (schema v7) — bandas de sueldo **estimadas** por Cowork/LLM cuando
+la oferta no las trae, 1 fila por `job_id`: `min, max, currency, period, confidence,
+rationale, source`. Se cargan con `jobcut ingest-salary` (la skill `jobcut-salary`) y solo
+se muestran si no hay banda estructurada ni una declarada en la descripción. Precedencia en
+el detalle: estructurada > declarada en el texto (`salary_listing`) > estimada.
+
+**`application_documents`** (schema v8) — **prep documents** en markdown adjuntos a una
+aplicación (notas de estudio, debriefs de entrevista), 1 fila por documento:
+`job_id, client_key` (idempotencia), `title, body, kind, event_id` (opcional: ancla el doc
+a un evento del timeline, p.ej. una ronda), `archived_at` (soft-delete). Se escriben por el
+bridge `jobcut ingest-documents` o dejando el `.md` en `documents/` (auto-import en `serve`);
+en el console son **de solo lectura** (vista "Prep documents" en el detalle).
 
 **`_meta`** — `schema_version`. Las migraciones son aditivas y version-gated (idempotentes).
 
@@ -316,9 +330,11 @@ perfil** — no hay listas de roles hardcodeadas. Cada score trae una razón de 
 
 ## 10. El console web, sección por sección
 
-Paleta GitHub-dark, rediseñado. Navegación: **Today · Applications · Searches · Discovery ·
-Settings** (+ Onboarding y Detalle). Las pantallas de Onboarding / Searches / Profile /
-Settings son **formularios estructurados amigables** — sin markdown ni JSON a la vista.
+Diseño tokenizado con **tema claro y oscuro** (toggle en la nav + control segmentado en
+Settings → "Appearance"; el tema se guarda en `localStorage` y se aplica antes del primer
+paint, sin flash). Navegación: **Today · Applications · Searches · Discovery · Settings**
+(+ Onboarding y Detalle). Las pantallas de Onboarding / Searches / Profile / Settings son
+**formularios estructurados amigables** — sin markdown ni JSON a la vista.
 
 - **Onboarding** (`/onboarding`) — wizard de primer arranque: (1) credenciales (validar
   Apify gratis + guardar), (2) perfil (subir CV → borrador, o completar el formulario),
@@ -329,11 +345,16 @@ Settings son **formularios estructurados amigables** — sin markdown ni JSON a 
   búsqueda con debounce). Cada card: score, razón, link a la oferta y cambio rápido de
   status. Secciones "New today" + "Backlog". Botones **Re-score** (gratis) y **Run
   scraper** (modal de coste → progreso SSE).
-- **Detalle** (`/job?id=…`) — descripción completa, **anillo de score** + "why it matches"
-  (chips de razones), datos de empresa, **status stepper**, y una **Interview process
-  card**: etapas nombradas + posición ("etapa 3/4"), avanzar etapa (con fecha opcional),
-  timing por aplicación ("Process: N días · avg gap N días"), y **"Suggest from posting"**
-  (propone etapas leyendo el aviso). Debajo, un **timeline de notas y actividad**.
+- **Detalle** (`/job?id=…`) — rediseñado alrededor del **proceso activo** (B-18). En el
+  hero: título, **status strip** compacto (mini-funnel clickeable + pill "In process" /
+  "Closed" + StatusSelect + "Open posting") y **banda de sueldo** (chip: estructurada,
+  declarada en el texto, o estimada). Columna izquierda accionable-primero: **Interview
+  process card** (etapas nombradas + posición "etapa 3/4", avanzar etapa con fecha opcional,
+  timing "Process: N días · avg gap N días", **"Suggest from posting"** que propone etapas
+  leyendo el aviso) → **Notes & activity** (solo notas) → descripción (colapsada con fade +
+  "Show full description"). A la derecha: "Why this matches you", tracking details y datos
+  de empresa. Una pestaña **"Prep documents"** muestra los documentos de preparación
+  adjuntos (markdown renderizado y saneado, agrupados por etapa: Offer-level / R1 / R2 / …).
 - **Applications** (`/applications`) — el centro de seguimiento: **KPI cards**, actividad
   semanal, **Pipeline** (funnel que muestra el alcance **acumulado** — "alguna vez llegó a
   X" — con un tenue "N active" por etapa), **Interview funnel** (conversión por ronda),
@@ -346,7 +367,10 @@ Settings son **formularios estructurados amigables** — sin markdown ni JSON a 
 - **Discovery** (`/discovery`) — market gaps: demanda de skills vs tu perfil
   (have/partial/gap), gaps priorizados, mix de segmentos.
 - **Settings** (`/settings`) — credenciales (validar/guardar), backend de scoring, data
-  dir + estado de la DB, **export** CSV/JSON, y link a editar el Perfil.
+  dir + estado de la DB, **export** CSV/JSON, link a editar el Perfil, un control
+  **"Appearance"** (claro/oscuro), y una card **"Update jobcut"**: muestra branch · sha ·
+  cambios locales y un botón "Update from repo" (`git pull --ff-only` + rebuild del console;
+  se pausa sin pisar nada si el working tree está sucio).
 - **Profile** (`/profile`) — editor estructurado del perfil, regenerar searches/rúbrica
   (no-destructivo), y editor de **pesos** de scoring.
 
@@ -379,7 +403,7 @@ de "run" con **SSE**; el resto es síncrono.
 | GET / PUT | `/credentials` | Lee (booleanos) / escribe `.env` (nunca devuelve secretos). |
 | POST | `/validate-credentials` | Valida Apify **gratis** (`user().get()`, no dispara actor). |
 | GET | `/shortlist` | Shortlist `{today, backlog, meta}`. Query: `min_score, backlog_min, q, location, recency_days, include_applied`. |
-| GET | `/jobs/{id}` | Oferta completa + score + estado de aplicación. |
+| GET | `/jobs/{id}` | Oferta completa + score + estado de aplicación + sueldo (`salary_listing` declarado en el texto cuando no hay banda estructurada; estimación si existe). |
 | GET | `/applications` | Todas las aplicaciones (enriquecidas con título/empresa + flags `days_in_stage`/`stalled`/`dormant`). |
 | POST | `/applications/manual` | Crea una oferta a mano (`source='manual'`) y enlaza una aplicación (el form "+ Add application"). |
 | GET | `/applications/funnel` | KPIs + funnel + por-categoría + por-semana + `reached` (alcance acumulado por etapa). |
@@ -392,6 +416,7 @@ de "run" con **SSE**; el resto es síncrono.
 | POST | `/applications/{id}/process/suggest` | Propone etapas leyendo el aviso (usa LLM si hay key). |
 | POST | `/applications/{id}/process/advance` | Avanza a la siguiente etapa (fecha opcional). |
 | GET | `/applications/{id}/process/timing` | Timing por aplicación (días por etapa; `null` si <2 rondas). |
+| GET | `/applications/{id}/documents` · `/documents/{doc_id}` | Prep documents de la oferta (solo lectura; excluye archivados; 404 si ausente o de otra oferta). |
 | GET | `/scoring/backends` | Lista los backends de scoring con flags de disponibilidad/usabilidad. |
 | GET | `/searches` · `/searches/structured` (CRUD) | Búsquedas: por archivo (`/{name}`) o como formulario estructurado (`/structured`, con `paused`). |
 | GET/PUT | `/profile` | Lee / escribe `profile.md` (crudo). |
@@ -407,6 +432,7 @@ de "run" con **SSE**; el resto es síncrono.
 | GET | `/runs/{id}` | Estado del run. |
 | GET | `/runs/{id}/events` | **SSE** del progreso (`stage`, `message`, `done`). |
 | GET/PUT/DELETE | `/schedule` | Lee / escribe / borra el schedule diario del sistema. |
+| GET/POST | `/update` | Estado del checkout (branch · sha · cambios locales) / actualiza jobcut (`git pull --ff-only` + rebuild). Solo localhost; se pausa sin pisar si el working tree está sucio. |
 
 **Guard de coste (regla dura):** `kind:"pull"` + `mode:"trigger"` (Apify de pago)
 **exige `confirm:true`**; si no → `409 confirmation_required`. `mode:"read"` y `score`
@@ -434,6 +460,9 @@ jobcut add-job [--url U | --company C --title T] [--location L] [--apply [STATUS
                             # agrega una oferta a mano (source=manual; opcional enlaza aplicación)
 jobcut ingest-scores FILE.json [--backend NAME]   # upsert de scores (default backend=claude_skills)
 jobcut ingest-events FILE.json    # aplica write-ops a aplicaciones (notas, rondas, status, campos)
+jobcut ingest-salary FILE.json    # upsert de bandas de sueldo estimadas (skill jobcut-salary)
+jobcut ingest-documents FILE.json # upsert de prep documents (markdown) por client_key; soft-delete via archive
+jobcut import-docs [--dir D] [--dry-run]   # importa los .md del drop-folder documents/ (lo que hace serve al arrancar)
 jobcut import-jobs FILE.json      # upsert de filas de jobs scrapeadas (sin scrape)
 
 # Mantenimiento del timeline / funnel
@@ -445,6 +474,7 @@ jobcut serve [--host H] [--port P] [--open] [--replace] [--no-build]
                             # API + console en un proceso. --open abre el navegador;
                             # --replace toma el puerto si está ocupado; --no-build no recompila
 jobcut shortcut [--path P] [--port N]   # deja el ícono de jobcut en el Escritorio (doble click, sin terminal)
+jobcut update [--no-build]  # git pull --ff-only + rebuild del console (se pausa sin pisar si hay cambios locales)
 jobcut dashboard            # Streamlit "lite" (extra [dashboard])
 ```
 
