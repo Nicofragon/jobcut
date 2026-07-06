@@ -31,7 +31,8 @@ def test_macos_app(tmp_path, monkeypatch, _isolated):
     body = exe.read_text()
     assert str(_isolated.resolve()) in body
     assert "--port 8000" in body
-    assert "http://127.0.0.1:8000" in body
+    # delegates reuse-or-replace to `serve --launcher` (no fragile curl guard of its own)
+    assert "serve --open --launcher" in body
     # the bundle carries its Info.plist and the shipped brand icon
     assert (app / "Contents" / "Info.plist").exists()
     assert (app / "Contents" / "Resources" / "jobcut.icns").exists()
@@ -49,7 +50,7 @@ def test_linux_desktop(tmp_path, monkeypatch, _isolated):
     assert launcher.exists()
     body = launcher.read_text()
     assert "[Desktop Entry]" in body
-    assert "xdg-open" in body
+    assert "serve --open --launcher" in body
     # a real icon and no terminal window (the point of this change)
     assert "jobcut.png" in body
     assert "Terminal=false" in body

@@ -72,6 +72,19 @@ def create_app(serve_web: bool = True) -> FastAPI:
               scoring.router, schedule.router, update.router):
         app.include_router(r, prefix="/api")
 
+    @app.get("/api/health")
+    def health() -> dict:
+        """Liveness + which code revision this process is running.
+
+        `serve` stamps JOBCUT_RUNNING_SHA with the checkout sha it started on. The
+        desktop launcher reads `running_sha` to decide reuse-vs-replace: after a
+        `git pull` the checkout moves ahead of a still-running server, so the launcher
+        knows to replace it (loading the new code) instead of just reopening the old one.
+        """
+        import os
+
+        return {"ok": True, "running_sha": os.environ.get("JOBCUT_RUNNING_SHA") or None}
+
     # When a static build exists, `jobcut serve` is a single process (no Node).
     if serve_web:
         build = web_build_dir()

@@ -484,6 +484,8 @@ def _maybe_build_web(no_build: bool) -> None:
         return  # stale-but-present build is still usable without Node
 
     print("  console: building the web console" + (" (update detected)…" if stale else " (first run)…"))
+    from . import update as _update
+    _update.clear_stale_next_lock(web)  # a prior interrupted build must not wedge this one
     try:
         if not (web / "node_modules").exists():
             subprocess.run([npm, "install"], cwd=web, check=True)
@@ -522,6 +524,58 @@ def _pids_on_port(port: int) -> list[int]:
     return [int(x) for x in out.stdout.split() if x.strip().isdigit()]
 
 
+def _probe_health(host: str, port: int, timeout: float = 1.5) -> dict | None:
+    """GET /api/health from a server already on the port. Returns the parsed dict, or
+    None if nothing answers in time (down, hung mid-build, or too old to have the route)."""
+    import json
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/api/health", timeout=timeout) as r:
+            return json.loads(r.read())
+    except Exception:  # noqa: BLE001 — unreachable / 404 / bad JSON all mean "not a healthy peer"
+        return None
+
+
+def _server_is_current(host: str, port: int) -> bool:
+    """True if the server already on the port is healthy AND running the checked-out code.
+
+    Used by the desktop launcher: a healthy current server is reused (just open the
+    browser); anything else — down, hung, or running pre-pull code — is replaced so the
+    click always lands on an up-to-date console. A non-git install can't drift, so any
+    healthy server there counts as current.
+    """
+    from . import update as _update
+
+    health = _probe_health(host, port)
+    if health is None:
+        return False
+    checkout = _update.current_sha()
+    running = health.get("running_sha")
+    if checkout is None or running is None:
+        return True  # can't detect drift (non-git, or server predates the sha stamp → reuse)
+    return running == checkout
+
+
+def _open_when_listening(url: str, host: str, port: int, timeout: float = 45.0) -> None:
+    """Open the browser once the server actually accepts connections — not on a fixed
+    timer. A first-run/after-update build delays the bind by tens of seconds; opening too
+    early lands on a dead 'can't connect' tab, which reads as 'the app didn't start'."""
+    import threading
+    import time
+    import webbrowser
+
+    def _wait() -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if _port_in_use(host, port):  # our uvicorn has bound the socket → ready
+                break
+            time.sleep(0.3)
+        webbrowser.open(url)
+
+    threading.Thread(target=_wait, daemon=True).start()
+
+
 def _free_port(host: str, port: int) -> bool:
     """Terminate whatever holds the port (SIGTERM, then SIGKILL stragglers) and wait for
     it to free up. Returns True if the port is free afterwards."""
@@ -553,15 +607,36 @@ def cmd_serve(args) -> int:
     except ImportError:
         print("The web console needs the API extra:  pip install 'jobcut[api]'")
         return 1
-    from . import paths
+    import os
+
+    from . import paths, update as _update
     from .api.app import web_build_dir
+
+    url = f"http://{args.host}:{args.port}"
+    launcher = getattr(args, "launcher", False)
 
     # Pre-flight: refuse to start on an occupied port. uvicorn prints its success banner
     # *before* it binds, so a bind clash otherwise reads as a fake "serving…" followed by
     # an error — and the stale process (often a previous `jobcut serve` running OLD code)
     # keeps answering, which is exactly the confusing failure we want to avoid.
     if _port_in_use(args.host, args.port):
-        if getattr(args, "replace", False):
+        if launcher:
+            # Desktop-icon launch: reuse a healthy, up-to-date server; replace anything
+            # else. This is what makes "click the icon" reliable — after an update, or if
+            # a prior server hung mid-build, the old process is taken over instead of
+            # bailing with an (invisible, from a .app) "port in use" error.
+            if _server_is_current(args.host, args.port):
+                print(f"jobcut is already running at {url} — opening it.")
+                if args.open:
+                    import webbrowser
+                    webbrowser.open(url)
+                return 0
+            print(f"  replacing the server on :{args.port} (out of date or not responding)…")
+            if not _free_port(args.host, args.port):
+                print(f"Could not free port {args.port}. Stop it manually:  "
+                      f"lsof -ti tcp:{args.port} | xargs kill")
+                return 1
+        elif getattr(args, "replace", False):
             if not _free_port(args.host, args.port):
                 print(f"Could not free port {args.port}. Stop it manually, then retry:")
                 print(f"    lsof -ti tcp:{args.port} | xargs kill")
@@ -577,6 +652,10 @@ def cmd_serve(args) -> int:
             print(f"    jobcut serve --port {args.port + 1}            # use a different port")
             return 1
 
+    # Stamp the code revision this process runs so a later `--launcher` start can tell
+    # whether the checkout has been pulled ahead of us (→ replace) or not (→ reuse).
+    os.environ["JOBCUT_RUNNING_SHA"] = _update.current_sha() or ""
+
     paths.data_dir().mkdir(parents=True, exist_ok=True)
     _maybe_build_web(getattr(args, "no_build", False))
     # Housekeeping on launch: age silent applications to "No response" so the tracker
@@ -585,7 +664,6 @@ def cmd_serve(args) -> int:
     aged = db.age_stale_applications(db.connect())
     if aged:
         print(f"  aged {aged} silent application(s) (no reply ≥{db.NO_RESPONSE_DAYS}d) → No response")
-    url = f"http://{args.host}:{args.port}"
     print(f"jobcut serve · data dir: {paths.data_dir()}")
     if web_build_dir():
         print(f"  console: serving the built web/ console at {url}")
@@ -596,9 +674,9 @@ def cmd_serve(args) -> int:
     print(f"  → {url}   ·   API docs: {url}/docs")
 
     if args.open:
-        import threading
-        import webbrowser
-        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+        # Wait for the socket to actually accept connections (a fresh build can delay the
+        # bind by tens of seconds) instead of opening on a fixed timer onto a dead tab.
+        _open_when_listening(url, args.host, args.port)
 
     _start_docs_inbox()
 
@@ -658,16 +736,16 @@ def _assets_dir():
 
 
 def _serve_cmd_bash(bin: str, data: str, port: int) -> str:
-    """Bash launcher body: open the browser if the port is already serving, else
-    `jobcut serve --open`. Shared by the macOS .app executable and the Linux .desktop."""
-    url = f"http://127.0.0.1:{port}"
+    """Bash launcher body shared by the macOS .app executable and the Linux .desktop.
+
+    `serve --launcher` handles reuse-or-replace itself — open a healthy, up-to-date
+    server; take over one that's out of date or hung; start fresh if nothing's there —
+    so the launcher is a single exec with no fragile curl guard of its own."""
     return (
         "#!/usr/bin/env bash\n"
         "# jobcut launcher — generated by `jobcut shortcut`. Safe to delete.\n"
         f'export JOBCUT_DATA_DIR="{data}"\n'
-        f'URL="{url}"\n'
-        'if curl -fsS -o /dev/null --max-time 1 "$URL" 2>/dev/null; then open "$URL"; exit 0; fi\n'
-        f'exec "{bin}" serve --open --port {port}\n'
+        f'exec "{bin}" serve --open --launcher --port {port}\n'
     )
 
 
@@ -719,12 +797,10 @@ def _build_linux_desktop(target, bin: str, data: str, port: int):
     import os
     from pathlib import Path
 
-    url = f"http://127.0.0.1:{port}"
     icon = _assets_dir() / "jobcut.png"
     inner = (
-        f'export JOBCUT_DATA_DIR="{data}"; URL="{url}"; '
-        'if curl -fsS -o /dev/null --max-time 1 "$URL" 2>/dev/null; then xdg-open "$URL"; exit 0; fi; '
-        f'exec "{bin}" serve --open --port {port}'
+        f'export JOBCUT_DATA_DIR="{data}"; '
+        f'exec "{bin}" serve --open --launcher --port {port}'
     )
     body = (
         "[Desktop Entry]\n"
@@ -750,7 +826,6 @@ def _build_windows(target, bin: str, data: str, port: int):
     import subprocess
     from pathlib import Path
 
-    url = f"http://127.0.0.1:{port}"
     base = target if target.is_dir() else Path(target).parent
     base.mkdir(parents=True, exist_ok=True)
     bat = (target / "jobcut.bat") if target.is_dir() else Path(target).with_suffix(".bat")
@@ -758,8 +833,7 @@ def _build_windows(target, bin: str, data: str, port: int):
         "@echo off\r\n"
         "REM jobcut launcher - generated by `jobcut shortcut`. Safe to delete.\r\n"
         f"set JOBCUT_DATA_DIR={data}\r\n"
-        f'curl -fsS -o NUL --max-time 1 {url} >NUL 2>&1 && (start "" {url} & exit /b 0)\r\n'
-        f'"{bin}" serve --open --port {port}\r\n'
+        f'"{bin}" serve --open --launcher --port {port}\r\n'
     )
     try:
         vbs = base / "jobcut-launch.vbs"
@@ -970,6 +1044,9 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--no-build", action="store_true", help="don't auto-build the web console if it's missing")
     ps.add_argument("--replace", action="store_true",
                     help="if the port is busy, stop the process holding it and take over")
+    ps.add_argument("--launcher", action="store_true",
+                    help="desktop-icon mode: reuse a healthy up-to-date server, else replace it "
+                         "(used by the generated shortcut — makes clicking the icon reliable)")
     ps.set_defaults(func=cmd_serve)
 
     pu = sub.add_parser("update", help="pull the latest code from the repo and rebuild the console")

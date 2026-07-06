@@ -108,6 +108,44 @@ def test_local_tracked_edit_preserved_when_not_upstream(clone):
     assert (work / "NEW.md").exists()
 
 
+def test_current_sha_none_when_not_git(tmp_path):
+    assert update.current_sha(tmp_path) is None
+
+
+def test_current_sha_reads_head(clone):
+    _origin, work = clone
+    sha = update.current_sha(work)
+    assert sha and sha == update.preflight(work)["sha"]
+
+
+def _lock(web, pid):
+    import json
+    (web / ".next").mkdir(parents=True, exist_ok=True)
+    lock = web / ".next" / "lock"
+    lock.write_text(json.dumps({"pid": pid, "appUrl": "http://x"}))
+    return lock
+
+
+def test_clear_stale_next_lock_removes_dead_pid(tmp_path):
+    # A build that didn't exit cleanly leaves a lock whose pid is gone → safe to remove.
+    lock = _lock(tmp_path / "web", 999999)  # no such process
+    assert update.clear_stale_next_lock(tmp_path / "web") is True
+    assert not lock.exists()
+
+
+def test_clear_stale_next_lock_keeps_live_pid(tmp_path):
+    # A real in-progress build (live pid) must keep its lock — we don't stomp it.
+    import os
+    lock = _lock(tmp_path / "web", os.getpid())
+    assert update.clear_stale_next_lock(tmp_path / "web") is False
+    assert lock.exists()
+
+
+def test_clear_stale_next_lock_absent_is_noop(tmp_path):
+    (tmp_path / "web" / ".next").mkdir(parents=True)
+    assert update.clear_stale_next_lock(tmp_path / "web") is False
+
+
 def test_update_router_wiring(monkeypatch):
     # Don't run real git in the API test — assert the endpoints return the module's result.
     monkeypatch.setattr(update, "preflight", lambda root=None: {"is_git": True, "sha": "abc1234", "clean": True})
