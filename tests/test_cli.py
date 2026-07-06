@@ -98,6 +98,65 @@ def test_serve_refuses_busy_port_without_replace(_isolated, capsys, monkeypatch)
     assert "--replace" in out
 
 
+def test_launcher_reuses_current_server(_isolated, capsys, monkeypatch):
+    """`serve --launcher` on an occupied port that's healthy AND up-to-date: just open
+    the browser and exit 0 — it must never build or reach uvicorn (that's the fast reuse
+    path a desktop-icon click takes when a good server is already running)."""
+    import socket
+    import webbrowser
+
+    import jobcut.cli as cli
+
+    calls = {"run": False, "opened": None}
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: calls.__setitem__("run", True))
+    monkeypatch.setattr(cli, "_server_is_current", lambda h, p: True)
+    monkeypatch.setattr(webbrowser, "open", lambda u: calls.__setitem__("opened", u))
+
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()
+    port = srv.getsockname()[1]
+    try:
+        rc = cli.main(["serve", "--launcher", "--open", "--port", str(port)])
+    finally:
+        srv.close()
+    assert rc == 0
+    assert calls["run"] is False
+    assert calls["opened"] == f"http://127.0.0.1:{port}"
+    assert "already running" in capsys.readouterr().out
+
+
+def test_launcher_replaces_stale_server(_isolated, monkeypatch):
+    """`serve --launcher` on an occupied port that's out of date or hung: free the port
+    and start fresh (reach uvicorn) — this is what makes the icon load new code after an
+    update instead of reconnecting to the old server."""
+    import socket
+
+    import jobcut.cli as cli
+
+    main(["init", "--no-input"])  # so db.connect()/age has a real data dir
+    calls = {"run": False, "freed": False}
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: calls.__setitem__("run", True))
+    monkeypatch.setattr(cli, "_server_is_current", lambda h, p: False)
+    monkeypatch.setattr(cli, "_free_port", lambda h, p: calls.__setitem__("freed", True) or True)
+    monkeypatch.setattr(cli, "_maybe_build_web", lambda no_build: None)
+    monkeypatch.setattr(cli, "_start_docs_inbox", lambda: None)
+
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()
+    port = srv.getsockname()[1]
+    try:
+        rc = cli.main(["serve", "--launcher", "--port", str(port)])
+    finally:
+        srv.close()
+    assert rc == 0
+    assert calls["freed"] is True   # took over the stale server
+    assert calls["run"] is True     # and started fresh
+
+
 def test_stats_json_is_clean_read_only_payload(_isolated, capsys):
     """`jobcut stats --json` prints a JSON pipeline payload (read path for Claude).
 

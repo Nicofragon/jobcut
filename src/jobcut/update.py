@@ -75,18 +75,68 @@ def preflight(root: Path | None = None) -> dict:
             "clean": not tracked, "dirty_files": tracked}
 
 
+def current_sha(root: Path | None = None) -> str | None:
+    """Short sha of the checkout, or None if this isn't a git install.
+
+    `serve` stamps this into the process env at startup so the launcher can tell a
+    running server apart from a checkout that has since been pulled forward.
+    """
+    root = root or repo_root()
+    if not (root / ".git").exists():
+        return None
+    r = _git(root, "rev-parse", "--short", "HEAD")
+    return r.stdout.strip() or None if r.returncode == 0 else None
+
+
+def clear_stale_next_lock(web: Path) -> bool:
+    """Remove a Next.js build lock left behind by a build that didn't exit cleanly.
+
+    Next writes `web/.next/lock` (a JSON serverInfo blob with the holder's `pid`) and
+    refuses to build while it exists — "Another next build process is already running."
+    A `jobcut serve` killed mid-build orphans that lock, wedging every later build. We
+    remove it ONLY when the recorded pid is dead (or unreadable): a live build keeps its
+    lock. Returns True if a stale lock was cleared. Best-effort — never raises.
+    """
+    import json
+    import os
+
+    lock = web / ".next" / "lock"
+    try:
+        if not lock.exists():
+            return False
+        pid = None
+        try:
+            pid = json.loads(lock.read_text()).get("pid")
+        except (ValueError, OSError, AttributeError):
+            pid = None
+        if isinstance(pid, int):
+            try:
+                os.kill(pid, 0)   # raises if the process is gone
+                return False      # a real build holds the lock — leave it alone
+            except OSError:
+                pass              # pid dead → the lock is stale
+        if lock.is_dir():
+            shutil.rmtree(lock, ignore_errors=True)
+        else:
+            lock.unlink()
+        return True
+    except OSError:
+        return False
+
+
 def _rebuild_web(root: Path) -> bool:
     """Rebuild the static console so the pulled web source is what gets served.
 
     The API serves `web/out` statically, so rebuilding in place means the next page
-    load gets the new assets — no server restart needed. Best-effort: returns False if
-    Node is missing or the build fails (the API keeps serving the prior build)."""
+    load gets the new assets. Best-effort: returns False if Node is missing or the build
+    fails (the API keeps serving the prior build)."""
     web = root / "web"
     if not (web / "package.json").exists():
         return False
     npm = shutil.which("npm")
     if not npm:
         return False
+    clear_stale_next_lock(web)   # a prior interrupted build must not wedge this one
     try:
         if not (web / "node_modules").exists():
             subprocess.run([npm, "install"], cwd=str(web), check=True, timeout=600)
@@ -160,8 +210,11 @@ def run_update(root: Path | None = None, rebuild: bool = True) -> dict:
         return result
 
     result["rebuilt"] = _rebuild_web(root) if rebuild else False
-    tail = (" Rebuilt the console — hard-refresh your browser to see the new version."
+    # The web build reloads on refresh, but this server is still running the OLD Python
+    # code — the new code only loads on a full relaunch. Reopening from the desktop icon
+    # does that: the launcher sees the checkout moved ahead and replaces this server.
+    tail = (" Quit and reopen jobcut from its icon to finish loading the new version."
             if result["rebuilt"]
-            else " Restart `jobcut serve` to rebuild the console.")
+            else " Quit and reopen jobcut from its icon to rebuild and load the new version.")
     result["message"] = f"Updated {from_sha} → {to_sha}.{tail}"
     return result

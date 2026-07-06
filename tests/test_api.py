@@ -65,6 +65,20 @@ def test_static_console_mount(tmp_path, monkeypatch):
 
 # --- health / status --------------------------------------------------------
 
+def test_health_reports_running_sha(client, monkeypatch):
+    """`/api/health` echoes the code revision `serve` stamped — the launcher reads this
+    to decide reuse-vs-replace. Cheap by design: no DB dependency, unlike /api/status."""
+    monkeypatch.setenv("JOBCUT_RUNNING_SHA", "abc1234")
+    body = client.get("/api/health").json()
+    assert body["ok"] is True
+    assert body["running_sha"] == "abc1234"
+
+
+def test_health_running_sha_none_when_unstamped(client, monkeypatch):
+    monkeypatch.delenv("JOBCUT_RUNNING_SHA", raising=False)
+    assert client.get("/api/health").json()["running_sha"] is None
+
+
 def test_status(client):
     r = client.get("/api/status")
     assert r.status_code == 200
