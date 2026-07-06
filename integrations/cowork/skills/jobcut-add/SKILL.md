@@ -4,8 +4,8 @@ description: >-
   Add a job to jobcut from a URL you paste — Claude fetches the posting, pulls out
   the company, title and location, and saves it (optionally as an application you're
   tracking). Use when the user pastes a job link or says things like "add this job
-  (paste a URL)", "agregá esta oferta (con su URL)", "guardá esta búsqueda de
-  Lever/Greenhouse", "apliqué a este rol (URL)", or wants a non-LinkedIn / expired
+  (paste a URL)", "save this Lever/Greenhouse posting", "I applied to this role
+  (URL)", or wants a non-LinkedIn / expired
   posting to show up in the tracker instead of a bare id. Writes via `jobcut add-job`
   (no manual JSON, no SQL).
 ---

@@ -12,7 +12,7 @@ top-to-bottom and have a working bridge.
 
 ## 1. What you're installing
 
-Ten skills (each a folder under [`skills/`](skills/)):
+Eleven skills (each a folder under [`skills/`](skills/)):
 
 | Skill | What it does |
 |-------|--------------|
@@ -58,7 +58,7 @@ bash integrations/cowork/install.sh <dir>      # -> a directory you choose
 Then **reload Claude Code** and ask it to **run the `jobcut` skill** — it confirms
 every skill is loaded and the CLI/data dir resolve, and says what's missing if not.
 
-### Cowork (desktop) — upload each skill via Personalizar
+### Cowork (desktop) — upload each skill via Customize
 
 Cowork does **not** read a skills folder; it imports skills through its UI, **one
 skill per file**. Build a zip per skill, then upload them:
@@ -68,11 +68,11 @@ bash integrations/cowork/install.sh --zip                 # -> ./jobcut-skill-zi
 bash integrations/cowork/install.sh --zip ~/Desktop/jobcut-skills   # somewhere handy
 ```
 
-Then in Cowork: **Personalizar → Subir habilidad**, and drop in each `<skill>.zip`.
+Then in Cowork: **Customize → Upload skill**, and drop in each `<skill>.zip`.
 Start with **`jobcut.zip`** — it's the front door (readiness check + routing); the
-other eight are the workers it dispatches to. It's a one-time setup (≈9 uploads);
-after importing, the skills appear under Personalizar — no reload needed. Then say
-**"trabajemos en mi búsqueda de empleo con jobcut"** / **"is jobcut ready?"** to have
+other ten are the workers it dispatches to. It's a one-time setup (≈11 uploads);
+after importing, the skills appear under Customize — no reload needed. Then say
+**"let's work on my job search with jobcut"** / **"is jobcut ready?"** to have
 the front door verify everything and route you.
 
 > A single zip with all the skills does **not** work — Cowork's uploader takes one
@@ -128,7 +128,7 @@ In Claude (Cowork/Code), just ask:
   and writes them back (no Apify, no manual JSON).
 - **“what should I apply to today?” / “top 10” / “how's my pipeline this week?” / “open
   the console”** → runs `jobcut-review` (read-only; no Apify cost).
-- **“Preply passed to R3, scheduled the 30th” / “add a note to Kiwi” / “mark Acme
+- **“Acme passed to R3, scheduled the 30th” / “add a note to Globex” / “mark Acme
   rejected” / “bump X to high priority”** → runs `jobcut-track`: updates the application
   (note, interview round, status, or fields) via `ingest-events`.
 - **“run jobcut-market”** → shows skill demand, your gaps, and segment mix.
@@ -144,22 +144,3 @@ jobcut market  --json   # the market summary as JSON
 
 Both are read-only. The only writers are `import-jobs`, `ingest-scores`,
 `ingest-events`, and `score` — all invoked by the skills via the CLI.
-
----
-
-## Onboarding copy
-
-Short strings for the Fase C onboarding (C3) to offer this step. Plain language, no
-jargon, reassuring:
-
-- **Title:** Automate your daily job search with Claude
-- **Body:** Let Claude pull new roles each day, score them against your profile, and
-  surface the best matches — all saved to your local jobcut database.
-- **Reassurance:** 100% local · uses your own Apify token · you choose Claude scoring
-  or the free built-in scorer · we never apply on your behalf.
-- **One-owner note:** Pick one runner — Claude's scheduled task *or* a cron job — so
-  the same search isn't scraped (and paid for) twice.
-- **Primary CTA:** Set up the Cowork bridge
-- **Secondary CTA:** Skip for now (you can enable it later in Settings)
-- **Success:** Your daily job search is set. Ask Claude to “run jobcut-daily”
-  anytime, or let the schedule do it.

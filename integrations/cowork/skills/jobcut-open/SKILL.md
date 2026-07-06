@@ -2,7 +2,7 @@
 name: jobcut-open
 description: >-
   Start the jobcut web console from chat — no terminal. Use when the user says
-  "open jobcut", "abrí jobcut", "launch the jobcut app", "levantá la consola", or
+  "open jobcut", "launch the jobcut app", "bring up the console", or
   "start jobcut". Launches `jobcut serve` in the background (taking over a stale
   server if needed) and gives back the URL to open.
 ---

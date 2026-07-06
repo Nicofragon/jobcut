@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# jobcut web console
 
-## Getting Started
+The Next.js front-end for [jobcut](../README.md) — the local job-search tracker. It's a
+static export (`next build` → `web/out/`) that the jobcut API serves as a single process;
+you don't deploy it anywhere.
 
-First, run the development server:
+## You don't run this directly
+
+For normal use, start everything with one command from the repo root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+jobcut serve --open      # builds the console if needed, serves API + UI, opens the browser
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+That serves the built console and the API together at `http://127.0.0.1:8000`. See the
+[root README](../README.md) and the [user manual](../docs/MANUAL.md) for the full workflow.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Developing the console
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Work on the UI with the Next.js dev server (hot reload), pointed at a running API:
 
-## Learn More
+```bash
+# terminal 1 — the API (and, incidentally, the built console) on :8000
+jobcut serve
 
-To learn more about Next.js, take a look at the following resources:
+# terminal 2 — the dev server on :3000, proxying API calls to :8000
+cd web
+npm install
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open `http://localhost:3000`. The dev server talks to the API on `:8000` (CORS is allowed
+for `localhost:3000`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Before opening a PR, keep it green:
 
-## Deploy on Vercel
+```bash
+npm run lint
+npm run build     # must succeed — `jobcut serve` ships whatever this produces in web/out/
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **This is not stock Next.js** — read [`AGENTS.md`](AGENTS.md) before changing framework
+  code; some APIs and conventions differ from what you may expect.
+- The build output (`web/out/`) and `node_modules/` are git-ignored; the API serves
+  `web/out/` when it exists and falls back to API-only when it doesn't.

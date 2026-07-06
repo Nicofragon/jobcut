@@ -1,0 +1,27 @@
+#!/bin/sh
+# Block secrets and machine-specific data from entering the repo.
+#
+# This hook is tracked and wired up by setup.sh (`git config core.hooksPath .githooks`),
+# so a fresh clone is protected — not just the machine it was authored on. It scans only
+# the lines a commit ADDS and refuses the commit if any look like a real API token, an
+# absolute home path, or a private key. This hook file is excluded from its own scan
+# (it necessarily contains the patterns).
+tokens='apify_api_[A-Za-z0-9]{20,}'
+homepaths='(/Users/|/home/)[a-z][a-zA-Z0-9._-]+/'
+keys='BEGIN [A-Z ]*PRIVATE KEY'
+patterns="$tokens|$homepaths|$keys"
+
+added=$(git diff --cached --diff-filter=ACM -U0 -- . ':(exclude).githooks/pre-commit' \
+  | grep -E '^\+' | grep -vE '^\+\+\+')
+# Allow the legitimate placeholders that live in the repo on purpose: the masked token
+# in .env.example, and the `/Users/you` / `/home/you` doc examples.
+hits=$(printf '%s\n' "$added" | grep -nE "$patterns" \
+  | grep -vE 'apify_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|/Users/you/|/home/you/')
+
+if [ -n "$hits" ]; then
+  echo "✗ pre-commit blocked: staged content looks like a secret or a machine-specific path:"
+  printf '%s\n' "$hits" | head
+  echo "Remove it — secrets and real home paths must stay local. Do NOT bypass with --no-verify."
+  exit 1
+fi
+exit 0

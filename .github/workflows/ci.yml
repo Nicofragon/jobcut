@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege: CI only reads the repo. No job needs to write contents, issues,
+# or packages, so the default GITHUB_TOKEN scope is narrowed to read-only.
+permissions:
+  contents: read
+
 jobs:
   python:
     # Matrix over the supported Python floor (3.11) and the dev version (3.12) so the

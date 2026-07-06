@@ -2,7 +2,7 @@
 #
 # One-command setup for jobcut.
 #
-#   git clone git@github.com:Nicofragon/jobcut.git
+#   git clone https://github.com/Nicofragon/jobcut.git
 #   cd jobcut
 #   ./setup.sh
 #
@@ -15,6 +15,12 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 say()  { printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\n\033[1;33m!\033[0m  %s\n' "$*"; }
+
+# 0) Install the repo git hooks (a fresh clone otherwise has none). The pre-commit
+#    hook blocks personal/test data from ever being committed. Harmless outside git.
+if [ -d .git ] && command -v git >/dev/null 2>&1; then
+  git config core.hooksPath .githooks 2>/dev/null || true
+fi
 
 # 1) Python 3.11+
 if ! command -v python3 >/dev/null 2>&1; then

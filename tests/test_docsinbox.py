@@ -71,18 +71,18 @@ def test_import_by_explicit_job_id(conn, tmp_path):
 
 
 def test_resolve_offer_by_company_and_role(conn, tmp_path):
-    jid = _seed_job(conn, "555", company="Preply", title="Staff Data Analyst")
+    jid = _seed_job(conn, "555", company="Acme", title="Staff Data Analyst")
     _seed_job(conn, "556", company="Other", title="Staff Data Analyst")
-    _doc(tmp_path, "ctx.md", {"company": "Preply", "role": "Data Analyst", "title": "Context"})
+    _doc(tmp_path, "ctx.md", {"company": "Acme", "role": "Data Analyst", "title": "Context"})
     s = docsinbox.import_dir(tmp_path, conn)
     assert s["written"] == 1
     assert db.get_documents(conn, jid)[0]["title"] == "Context"
 
 
 def test_ambiguous_company_is_skipped_not_mislinked(conn, tmp_path):
-    _seed_job(conn, "1", company="Globant", title="Analyst")
-    _seed_job(conn, "2", company="Globant", title="Engineer")
-    _doc(tmp_path, "x.md", {"company": "Globant"})
+    _seed_job(conn, "1", company="Initech", title="Analyst")
+    _seed_job(conn, "2", company="Initech", title="Engineer")
+    _doc(tmp_path, "x.md", {"company": "Initech"})
     s = docsinbox.import_dir(tmp_path, conn)
     assert s["written"] == 0 and s["skipped"] == 1
     assert "2 offers matched" in s["errors"][0]

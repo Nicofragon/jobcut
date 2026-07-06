@@ -4,8 +4,8 @@ description: >-
   Estimate a salary band for jobcut offers where the employer didn't disclose one,
   using a web search, and write it back as an ESTIMATE (clearly separate from a real
   disclosed band). Use when the user says things like "estimate salaries", "what would
-  these roles pay?", "estimá el sueldo de las ofertas sin banda", "rangos salariales de
-  mi shortlist", or "how much does this role pay in this city?". Searches the web for
+  these roles pay?", "estimate the salary for offers with no band", "salary ranges for
+  my shortlist", or "how much does this role pay in this city?". Searches the web for
   role + seniority + location, then writes via `jobcut ingest-salary` (no manual JSON,
   no SQL). Never overwrites a disclosed salary.
 ---

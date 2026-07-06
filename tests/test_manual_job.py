@@ -24,13 +24,13 @@ def test_jobid_linkedin_url_numeric():
 
 
 def test_jobid_ats_url_slug():
-    assert jobid.job_id_from_url("https://jobs.kiwi.com/jobs/senior-ba-inventory/") == "kiwi-senior-ba-inventory"
+    assert jobid.job_id_from_url("https://jobs.globex.com/jobs/senior-ba-inventory/") == "globex-senior-ba-inventory"
 
 
 def test_jobid_noise_host_label_skipped():
-    # 'jobs' is a noise label → the company label becomes 'kiwi', not 'jobs'.
-    out = jobid.job_id_from_url("https://jobs.kiwi.com/jobs/senior-ba-inventory/")
-    assert out.startswith("kiwi-")
+    # 'jobs' is a noise label → the company label becomes 'globex', not 'jobs'.
+    out = jobid.job_id_from_url("https://jobs.globex.com/jobs/senior-ba-inventory/")
+    assert out.startswith("globex-")
     assert not out.startswith("jobs-")
 
 
@@ -52,14 +52,14 @@ def test_jobid_none_without_host_path():
 # --- ingest.add_job ---------------------------------------------------------
 
 def test_add_job_creates_manual_row(conn):
-    res = ingest.add_job({"url": "https://jobs.kiwi.com/jobs/senior-ba-inventory/",
-                          "company": "Kiwi", "title": "Senior BA"}, conn)
+    res = ingest.add_job({"url": "https://jobs.globex.com/jobs/senior-ba-inventory/",
+                          "company": "Globex", "title": "Senior BA"}, conn)
     assert res["created"] is True
-    assert res["job_id"] == "kiwi-senior-ba-inventory"
+    assert res["job_id"] == "globex-senior-ba-inventory"
     row = db.get_job_row(conn, res["job_id"])
     assert row is not None
     assert "manual" in row["source_searches"]
-    assert row["company_name"] == "Kiwi"
+    assert row["company_name"] == "Globex"
     assert row["title"] == "Senior BA"
 
 
@@ -70,11 +70,11 @@ def test_add_job_explicit_job_id_respected(conn):
 
 
 def test_add_job_idempotent_no_dup(conn):
-    url = "https://jobs.kiwi.com/jobs/senior-ba-inventory/"
-    first = ingest.add_job({"url": url, "company": "Kiwi", "title": "Senior BA"}, conn)
+    url = "https://jobs.globex.com/jobs/senior-ba-inventory/"
+    first = ingest.add_job({"url": url, "company": "Globex", "title": "Senior BA"}, conn)
     assert first["created"] is True
     before = db.count_jobs(conn)
-    second = ingest.add_job({"url": url, "company": "Kiwi", "title": "Senior BA"}, conn)
+    second = ingest.add_job({"url": url, "company": "Globex", "title": "Senior BA"}, conn)
     assert second["created"] is False
     assert second["job_id"] == first["job_id"]
     assert db.count_jobs(conn) == before  # no duplicate row
@@ -95,17 +95,17 @@ def test_add_job_requires_minimum_fields(conn):
 
 
 def test_add_job_application_cross_references(conn):
-    res = ingest.add_job({"url": "https://jobs.kiwi.com/jobs/senior-ba-inventory/",
-                          "company": "Kiwi", "title": "Senior BA"}, conn)
+    res = ingest.add_job({"url": "https://jobs.globex.com/jobs/senior-ba-inventory/",
+                          "company": "Globex", "title": "Senior BA"}, conn)
     db.set_application_status(conn, res["job_id"], "applied", source="manual")
     df = db.read_applications_enriched(conn)
     row = df[df.job_id == res["job_id"]].iloc[0]
     assert row.title == "Senior BA"
-    assert row.company_name == "Kiwi"
+    assert row.company_name == "Globex"
 
 
 def test_add_job_unscored_excluded_from_surface(conn):
-    res = ingest.add_job({"company": "Kiwi", "title": "Senior BA",
+    res = ingest.add_job({"company": "Globex", "title": "Senior BA",
                           "location": "Madrid, Spain"}, conn)
     # no score row → surface (min_score floor) must not include it
     assert db.get_score_row(conn, res["job_id"]) is None
@@ -129,14 +129,14 @@ def client(tmp_path, monkeypatch):
 
 def test_api_manual_creates_job_and_application(client):
     r = client.post("/api/applications/manual", json={
-        "url": "https://jobs.kiwi.com/jobs/senior-ba-inventory/",
-        "company": "Kiwi", "title": "Senior BA", "location": "Madrid",
+        "url": "https://jobs.globex.com/jobs/senior-ba-inventory/",
+        "company": "Globex", "title": "Senior BA", "location": "Madrid",
     })
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["job_id"] == "kiwi-senior-ba-inventory"
+    assert body["job_id"] == "globex-senior-ba-inventory"
     assert body["title"] == "Senior BA"
-    assert body["company_name"] == "Kiwi"
+    assert body["company_name"] == "Globex"
     assert body["status"] == "applied"
 
 

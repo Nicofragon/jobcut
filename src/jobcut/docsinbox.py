@@ -14,12 +14,12 @@ The frontmatter contract (everything but the offer is optional):
     ---
     jobcut:
       job_id: "4396360445"          # the offer. Or resolve by company (+ role):
-      company: "Preply"
+      company: "Acme"
       role: "Staff Data Analyst"
       title: "Opening pitch"        # the document's display title (else its H1 / filename)
       round: "R3"                   # anchor to an interview round. Or event_id: 123
       doc_type: "prep"              # prep | study | debrief | other   (default: prep)
-      client_key: "preply-pitch"    # default: a stable slug of the file's path
+      client_key: "acme-pitch"      # default: a stable slug of the file's path
     ---
     # body in markdown…
 
@@ -50,12 +50,12 @@ for everyone — it is not your Obsidian vault or iCloud.
 ---
 jobcut:
   job_id: "4396360445"          # the offer. Or match by company (+ role):
-  company: "Preply"
+  company: "Acme"
   role: "Staff Data Analyst"
   title: "Opening pitch"        # the document's title (optional; else its H1 / filename)
   round: "R3"                   # optional — anchor to an interview round. Or: event_id: 123
   doc_type: "prep"              # prep | study | debrief | other   (default: prep)
-  client_key: "preply-pitch"    # optional — default: a stable slug of this file's path
+  client_key: "acme-pitch"      # optional — default: a stable slug of this file's path
 ---
 # Your document, in markdown…
 ```
