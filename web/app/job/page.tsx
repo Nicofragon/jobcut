@@ -690,7 +690,8 @@ function JobDetailView() {
             </div>
           )}
 
-          {/* tracking details — depurado: Priority + Due date removed (unused in practice) */}
+          {/* tracking details — Priority removed (unused); Follow-up date kept: it drives
+              the "Needs attention" nudge, so it must stay editable + clearable here. */}
           {data.application && (
             <Panel title="Tracking details">
               <div className="space-y-4">
@@ -701,6 +702,21 @@ function JobDetailView() {
                     placeholder="e.g. send portfolio"
                     className={FIELD_CLS}
                   />
+                </FieldRow>
+                {/* Follow-up date drives the "Needs attention" nudge on the applications
+                    page (overdue/due). Editable + clearable here so a reminder you no
+                    longer need can be updated or removed — leaving it empty silences it. */}
+                <FieldRow label="Follow-up date">
+                  <input
+                    type="date"
+                    key={data.application.next_action_date ?? "none"}
+                    defaultValue={(data.application.next_action_date ?? "").slice(0, 10)}
+                    onChange={(e) => patchField("next_action_date", e.target.value)}
+                    className={FIELD_CLS}
+                  />
+                  <span className="mt-1 block text-xs text-on-surface-faint">
+                    When a follow-up is due. Clear it to remove the “Needs attention” reminder.
+                  </span>
                 </FieldRow>
                 <FieldRow label="Contact">
                   <input
