@@ -18,6 +18,23 @@ which skills are in demand, where, and how that shifts over weeks.
 > launched with a single `jobcut serve`, and updatable in-app. Not yet on PyPI; install
 > from this repo with `pip install -e .`.
 
+![jobcut — your ranked shortlist for today](docs/screenshots/today.png)
+
+---
+
+## Screenshots
+
+The local web console (dark theme shown). **All data below is fictional demo content** —
+your real jobs, profile, and applications never leave your machine.
+
+| **Application tracker** — funnel, KPIs, and an "act this week" list | **Job detail** — match score, interview process, and full timeline |
+| :---: | :---: |
+| [![Application tracker](docs/screenshots/applications.png)](docs/screenshots/applications.png) | [![Job detail](docs/screenshots/job-detail.png)](docs/screenshots/job-detail.png) |
+| **Discovery** — what the market asks for vs. your profile gaps | **Searches** — plain-language job searches, no codes to look up |
+| [![Market / skill gaps](docs/screenshots/market.png)](docs/screenshots/market.png) | [![Searches](docs/screenshots/searches.png)](docs/screenshots/searches.png) |
+| **Onboarding** — from zero to your first ranked shortlist | |
+| [![Onboarding wizard](docs/screenshots/onboarding.png)](docs/screenshots/onboarding.png) | |
+
 ---
 
 ## Architecture
