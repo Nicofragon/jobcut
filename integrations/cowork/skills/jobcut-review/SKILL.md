@@ -3,8 +3,8 @@ name: jobcut-review
 description: >-
   Review the jobcut shortlist and answer questions about your job-search data —
   read-only, via the CLI. Use when the user says "what should I apply to today",
-  "show my top 10", "how's my pipeline / what did I apply to this week", "qué
-  ofertas tengo", or "open the jobcut console". Reads `surface --json`,
+  "show my top 10", "how's my pipeline / what did I apply to this week", "what
+  jobs do I have", or "open the jobcut console". Reads `surface --json`,
   `stats --json`, and `market --json`; can launch the web console with
   `jobcut serve --open`. Never scrapes (no cost) and never writes.
 ---

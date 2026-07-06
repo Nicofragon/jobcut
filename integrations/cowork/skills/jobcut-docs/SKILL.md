@@ -4,9 +4,8 @@ description: >-
   Save a long preparation document — interview prep, a pitch, STAR stories,
   study notes, a post-interview debrief — into a jobcut application, where it
   shows under "Prep documents" on the job-detail page. Use when the user says
-  things like "save this prep doc into the Preply application", "guarda este
-  documento de preparación en la oferta de Preply", "add my STAR stories to the
-  Acme application", "store this pitch / company-context note in jobcut", or
+  things like "save this prep doc into the Acme application", "add my STAR
+  stories to the Acme application", "store this pitch / company-context note in jobcut", or
   "save the R2 interview debrief". Resolves the application from the
   company/title, then writes via `jobcut ingest-documents` (no manual JSON
   fiddling beyond the small payload, no SQL). This is for *documents* (reusable
@@ -76,7 +75,7 @@ is `scores.match_reasons` — that's the score's "why", owned only by `jobcut-sc
 
 3. **Choose a stable `client_key` for idempotency.** This is what makes re-saving an
    edited doc **update in place** instead of creating a duplicate. Use a stable slug per
-   document, e.g. `preply-star-pitch`, `preply-r2-sql-cheatsheet`. Save the same doc again
+   document, e.g. `acme-star-pitch`, `acme-r2-sql-cheatsheet`. Save the same doc again
    with the same `client_key` → it's overwritten, not duplicated. (Omit only for a truly
    one-off you'll never revise.)
 
@@ -94,10 +93,10 @@ is `scores.match_reasons` — that's the score's "why", owned only by `jobcut-sc
    ```json
    { "documents": [
        { "job_id": "4396360445", "title": "STAR stories & 2-min pitch",
-         "doc_type": "prep", "client_key": "preply-star-pitch",
+         "doc_type": "prep", "client_key": "acme-star-pitch",
          "body": "# Pitch\n\n…full markdown…" },
        { "job_id": "4396360445", "title": "R2 — SQL cheatsheet",
-         "doc_type": "study", "client_key": "preply-r2-sql", "event_id": 812,
+         "doc_type": "study", "client_key": "acme-r2-sql", "event_id": 812,
          "body": "## Window functions\n\n| … | … |\n|---|---|\n…" }
    ] }
    ```
@@ -132,12 +131,12 @@ Write **one `.md` per document**, body below the frontmatter:
 ---
 jobcut:
   job_id: "4396360445"          # the offer. Or resolve by company (+ role):
-  company: "Preply"
+  company: "Acme"
   role: "Staff Data Analyst"
   title: "Opening pitch"        # the document's title (optional; else its H1 / filename)
   round: "R3"                   # optional — anchor to a round. Or: event_id: 123
   doc_type: "prep"              # prep | study | debrief | other   (default: prep)
-  client_key: "preply-pitch"    # optional — edit + re-save updates in place (no duplicate)
+  client_key: "acme-pitch"      # optional — edit + re-save updates in place (no duplicate)
 ---
 # Opening pitch
 
@@ -148,7 +147,7 @@ jobcut:
   **exactly one** offer or the file is skipped (the importer never mis-links).
 - `round`/`event_id` is optional → offer-level if omitted or not uniquely resolved.
 - Place the file at `<jobcut-install>/documents/` (subfolders are fine, e.g.
-  `documents/preply/pitch.md`). **If your environment can't reach that folder, give the
+  `documents/acme/pitch.md`). **If your environment can't reach that folder, give the
   finished `.md` to the user to drop in** — the auto-import does the rest, no terminal.
 - This is the **same write** as `ingest-documents` under the hood (idempotent by
   `client_key`); it's just the path for when the CLI isn't available.

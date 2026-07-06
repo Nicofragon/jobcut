@@ -268,7 +268,7 @@ the doc in place by a stable `client_key`):
   folder, so it appears in the console with no command. `jobcut import-docs`
   runs the same import by hand (`--dry-run` to preview).
 - **A Claude skill / the CLI** — the `jobcut-docs` Cowork skill ("save these
-  study notes into the Preply app") writes through `jobcut ingest-documents`.
+  study notes into the Acme app") writes through `jobcut ingest-documents`.
 
 ### Salary bands
 

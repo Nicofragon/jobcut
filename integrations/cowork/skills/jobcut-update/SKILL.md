@@ -2,7 +2,7 @@
 name: jobcut-update
 description: >-
   Update the jobcut app to the latest version from git and rebuild the console.
-  Use when the user says "update jobcut", "actualizá la app", "I pulled new code
+  Use when the user says "update jobcut", "update the app", "I pulled new code
   but I still see the old design", or "get the latest jobcut". Pulls the repo,
   reinstalls if dependencies changed, and restarts `jobcut serve` (which
   auto-rebuilds the web console). Read-only on the database — it never scrapes,

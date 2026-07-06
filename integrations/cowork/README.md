@@ -21,10 +21,10 @@ directly.** Every write goes through the CLI, which is the single schema authori
 | "run my daily job search" / "pull and score new jobs" | [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | Pull saved searches (local Apify client) → score → shortlist |
 | "score my jobs with Claude" / "re-score these" | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Claude scores jobs against your profile and writes them straight to the DB |
 | "what should I apply to?" / "top 10" / "how's my pipeline this week?" / "open the console" | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** Top picks to apply, pipeline/weekly stats, or launch the web console |
-| "Preply passed to R3, scheduled the 30th" / "add a note to Kiwi" / "mark Acme rejected" / "bump X to high priority" | [`jobcut-track`](skills/jobcut-track/SKILL.md) | **Write.** Update an application — note, interview round, status, or fields — via `ingest-events` |
-| "save this prep doc into the Preply application" / "guardá mis STAR stories en jobcut" / "store the R2 debrief" | [`jobcut-docs`](skills/jobcut-docs/SKILL.md) | **Write.** Save a prep/study/debrief document (markdown) into an application — shows under "Prep documents" — via `ingest-documents` |
-| "add this job &lt;url&gt;" / "guardá esta oferta de Lever" / "apliqué a este rol &lt;url&gt;" | [`jobcut-add`](skills/jobcut-add/SKILL.md) | **Write.** Claude fetches the URL, extracts company/title/location, and saves the job (optionally as an application) via `add-job` |
-| "open jobcut" / "abrí jobcut" / "launch the console" | [`jobcut-open`](skills/jobcut-open/SKILL.md) | Start the web console in the background and hand back the URL — no terminal |
+| "Acme passed to R3, scheduled the 30th" / "add a note to Globex" / "mark Acme rejected" / "bump X to high priority" | [`jobcut-track`](skills/jobcut-track/SKILL.md) | **Write.** Update an application — note, interview round, status, or fields — via `ingest-events` |
+| "save this prep doc into the Acme application" / "store the R2 debrief" | [`jobcut-docs`](skills/jobcut-docs/SKILL.md) | **Write.** Save a prep/study/debrief document (markdown) into an application — shows under "Prep documents" — via `ingest-documents` |
+| "add this job &lt;url&gt;" / "save this Lever posting" / "I applied to this role &lt;url&gt;" | [`jobcut-add`](skills/jobcut-add/SKILL.md) | **Write.** Claude fetches the URL, extracts company/title/location, and saves the job (optionally as an application) via `add-job` |
+| "open jobcut" / "launch the console" | [`jobcut-open`](skills/jobcut-open/SKILL.md) | Start the web console in the background and hand back the URL — no terminal |
 | "what's the market asking for?" / "my skill gaps" | [`jobcut-market`](skills/jobcut-market/SKILL.md) | Summarize skill demand vs your profile |
 | "estimate salaries for my shortlist" / "what would these roles pay?" | [`jobcut-salary`](skills/jobcut-salary/SKILL.md) | **Write.** Estimate a band (web search) for offers with no disclosed salary, via `ingest-salary` — shown "estimated", never overrides a real band |
 | "update jobcut" / "I still see the old design" | [`jobcut-update`](skills/jobcut-update/SKILL.md) | Pull latest code, reinstall if deps changed, rebuild + restart the console |
@@ -86,5 +86,5 @@ Full step-by-step in [`SETUP.md`](SETUP.md). In short: install jobcut, set
 UI), install the skills, and choose your run owner (in-app scheduler by default). Skill
 install differs by tool: **Claude Code** copies the folders
 (`bash integrations/cowork/install.sh`); **Cowork** imports each skill through its UI
-(`bash integrations/cowork/install.sh --zip`, then upload each zip via Personalizar →
-Subir habilidad, starting with `jobcut.zip`). See SETUP.md §3.
+(`bash integrations/cowork/install.sh --zip`, then upload each zip via Customize →
+Upload skill, starting with `jobcut.zip`). See SETUP.md §3.

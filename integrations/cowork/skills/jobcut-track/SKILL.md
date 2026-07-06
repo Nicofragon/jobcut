@@ -4,9 +4,9 @@ description: >-
   Update your jobcut applications by talking to Claude — add a note, log an
   interview round, change status, or set fields like priority/next action, all
   written straight into the local jobcut database. Use when the user says things
-  like "Preply passed to R3, scheduled for the 30th", "Preply pasó a R3 agendada
-  el 30/06", "add a note to the Kiwi application", "mark Acme as rejected",
-  "bump Globant to high priority", or "log the technical interview for X".
+  like "Acme passed to R3, scheduled for the 30th", "add a note to the Globex
+  application", "mark Acme as rejected", "bump Initech to high priority", or
+  "log the technical interview for X".
   Resolves the application from the company/title, then writes via
   `jobcut ingest-events` (no manual JSON, no SQL).
 ---
@@ -15,7 +15,7 @@ description: >-
 
 Lets Claude **write** to your jobcut application tracker from a normal conversation
 — the funnel-side counterpart to `jobcut-score`. The user describes what happened
-("Preply moved to round 3, scheduled for June 30") and Claude records it: a note, an
+("Acme moved to round 3, scheduled for June 30") and Claude records it: a note, an
 interview round, a status change, or a structured field — all through the `jobcut`
 CLI. This is the only write-path skill; the others (`jobcut-score`, `jobcut-review`)
 score or read.
@@ -71,14 +71,14 @@ interview prep, a pitch, STAR stories, a study sheet, a post-round debrief — i
      that duplicates the whole block on the timeline. One note in, one note on the
      timeline. (Notes do not overwrite any summary field; there is nothing to preserve.)
    - **Log an interview round** → `{"job_id": "...", "kind": "interview",
-     "body": "Technical with Diego", "meta": {"stage": "Technical", "index": 2},
+     "body": "Technical with Sam", "meta": {"stage": "Technical", "index": 2},
      "date": "2026-06-15"}` (use `date` for when the round actually happened; `YYYY-MM-DD`).
    - **Change status** → `{"job_id": "...", "status": "interview"}` (or `offer`,
      `rejected`, `withdrawn`, `screen`, `applied`, …). This is the funnel choke-point —
      use the `status` field, not a `status_change` kind.
    - **Set structured fields** → `{"job_id": "...", "fields": {"priority": "high",
      "next_action": "send portfolio", "next_action_date": "2026-07-01",
-     "contact": "Diego Yus", "cv_version": "v3"}}`
+     "contact": "Sam Rivera", "cv_version": "v3"}}`
 
    To do several things to one application (e.g. log a round **and** bump priority),
    emit **several items** — one op each.

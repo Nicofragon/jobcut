@@ -62,7 +62,7 @@ jobcut and its dependencies, builds the web console (if you have Node), and open
 a guided setup wizard. You never touch a virtualenv or edit a config file by hand.
 
 ```bash
-git clone git@github.com:Nicofragon/jobcut.git && cd jobcut
+git clone https://github.com/Nicofragon/jobcut.git && cd jobcut
 ./setup.sh
 ```
 
@@ -157,10 +157,10 @@ interview debriefs) into a role, **add a job from a URL**, **open the console**,
 | "run my daily job search" | `jobcut-daily` |
 | "score my jobs with Claude" | `jobcut-score` |
 | "what should I apply to? / how's my pipeline?" | `jobcut-review` |
-| "Preply passed to R3 / add a note to Kiwi / mark Acme rejected" | `jobcut-track` |
-| "save this prep doc / study notes / interview debrief into the Preply app" | `jobcut-docs` |
+| "Acme passed to R3 / add a note to Globex / mark Initech rejected" | `jobcut-track` |
+| "save this prep doc / study notes / interview debrief into the Acme app" | `jobcut-docs` |
 | "add this job &lt;url&gt; / I applied to this Lever role" | `jobcut-add` |
-| "open jobcut / abrí jobcut" | `jobcut-open` |
+| "open jobcut / launch the console" | `jobcut-open` |
 | "what's the market asking for?" | `jobcut-market` |
 | "estimate salaries for these roles" | `jobcut-salary` |
 | "update jobcut / I still see the old design" | `jobcut-update` |

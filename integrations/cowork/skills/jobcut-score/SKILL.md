@@ -3,8 +3,8 @@ name: jobcut-score
 description: >-
   Score jobcut job listings against the user's profile and write the results
   straight into the local jobcut database — fully automatic, no manual JSON.
-  Use when the user says "score my jobs", "puntuá mis ofertas con Claude",
-  "re-score with Claude", or "update the jobcut scores". Reads jobs needing a
+  Use when the user says "score my jobs", "re-score with Claude", or
+  "update the jobcut scores". Reads jobs needing a
   score via `jobcut unscored`/`surface`, judges each against profile.md, and
   writes them back via `jobcut ingest-scores` (tagged backend=claude_skills).
 ---
@@ -104,7 +104,7 @@ for scoring; `surface` is only for the final report in step 6.
   descriptions) and `jobcut surface --json` (report view, no descriptions). The only
   writer is `jobcut ingest-scores`. No raw SQL, ever.
 - **`match_reasons` is the *scoring rationale* — yours alone.** It explains *why a job
-  scored what it did* ("BI Analyst +25; Madrid híbrido +15; …") and is written **only**
+  scored what it did* ("BI Analyst +25; Madrid hybrid +15; …") and is written **only**
   by this skill via `ingest-scores`. It is **not** a place to record notes, reminders,
   or anything the user *tells you happened* — that's a **note** and goes through
   `jobcut-track` (`kind:"note"`), where it shows in "Notes & activity". Putting a note

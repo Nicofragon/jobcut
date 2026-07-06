@@ -81,7 +81,7 @@ resolved:
   isn't resolving. Run from the jobcut project folder, or
   `export JOBCUT_DATA_DIR=/path/to/your/jobcut-data`.
 
-Report which specific thing failed and which is fine — "8/9 skills loaded,
+Report which specific thing failed and which is fine — "10/11 skills loaded,
 `jobcut-score` missing; CLI + DB OK" — so the fix is targeted.
 
 ## 3. Route the request to the right skill
@@ -117,7 +117,7 @@ what the user is recording** — this is the distinction that's been gotten wron
 | **Why a job scored what it did** | **`scores.match_reasons`** | **`jobcut-score` → `ingest-scores` only** | the score's "why" line |
 
 **A note is not a match reason.** `scores.match_reasons` is the *scoring rationale*
-("BI Analyst +25; Madrid híbrido +15; …") and is owned **only** by the scorer. Never
+("BI Analyst +25; Madrid hybrid +15; …") and is owned **only** by the scorer. Never
 stash a note, a reminder, or a status there — it won't appear in "Notes & activity"
 and it corrupts the score's explanation. Anything the user *tells you happened* is a
 note (or status/field/round) and goes through `jobcut-track`.

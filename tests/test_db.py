@@ -459,9 +459,9 @@ def test_document_insert_and_get(conn):
 
 def test_document_idempotent_update_by_client_key(conn):
     a = db.upsert_document(conn, job_id="1", title="Debrief", body="v1",
-                           client_key="preply-r3-debrief", now="2026-06-20T10:00:00")
+                           client_key="acme-r3-debrief", now="2026-06-20T10:00:00")
     b = db.upsert_document(conn, job_id="1", title="Debrief (edited)", body="v2",
-                           client_key="preply-r3-debrief", now="2026-06-21T09:00:00")
+                           client_key="acme-r3-debrief", now="2026-06-21T09:00:00")
     assert b["doc_id"] == a["doc_id"]                 # updated in place, no duplicate
     assert b["body"] == "v2" and b["title"] == "Debrief (edited)"
     assert b["created_at"] == "2026-06-20T10:00:00"   # preserved

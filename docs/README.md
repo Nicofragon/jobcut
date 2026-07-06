@@ -14,6 +14,6 @@ and quick start; this folder holds the deeper user and architecture docs.
 
 | Doc | What it covers |
 |-----|----------------|
-| [../integrations/cowork/README.md](../integrations/cowork/README.md) | How Claude drives jobcut: the ten skills (jobcut front door · daily · score · review · track · add · open · market · salary · update) and the CLI-as-database contract. |
+| [../integrations/cowork/README.md](../integrations/cowork/README.md) | How Claude drives jobcut: the eleven skills (jobcut front door · daily · score · review · track · docs · add · open · market · salary · update) and the CLI-as-database contract. |
 | [../integrations/cowork/SETUP.md](../integrations/cowork/SETUP.md) | Step-by-step setup of the Claude/Cowork bridge (install skills, configure the data dir, choose one run owner). |
 
