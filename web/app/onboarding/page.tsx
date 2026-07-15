@@ -525,9 +525,7 @@ function Scoring({
                 )}
               </div>
               <p className="mt-1 text-sm text-on-surface-variant">{b.description}</p>
-              {!b.usable && b.reason && (
-                <p className="mt-2 text-xs text-on-surface-faint">{b.reason}</p>
-              )}
+              {b.note && <p className="mt-2 text-xs text-on-surface-faint">{b.note}</p>}
             </button>
           );
         })}

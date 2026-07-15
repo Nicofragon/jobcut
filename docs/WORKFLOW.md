@@ -127,8 +127,8 @@ jobcut score
 ```
 
 Scoring is **pluggable** — a `Scorer` interface ([scoring/base.py](../src/jobcut/scoring/base.py))
-with four backends selected by `config.json → scoring.backend` (anything not
-usable falls back to `rule_based`, the floor):
+with two backends selected by `config.json → scoring.backend`. They differ in *where* the
+judging happens, not in price — both are free:
 
 - **`rule_based`** (default · [rule_based.py](../src/jobcut/scoring/rule_based.py))
   — pure Python, no API key, no cost. A transparent rubric you tune in
@@ -140,18 +140,16 @@ usable falls back to `rule_based`, the floor):
   +15  workable location                  −20  a hard requirement you don't meet
   +10  profile signals (nice-to-have)     out-of-profile titles capped low
   ```
-- **`local`** ([local.py](../src/jobcut/scoring/local.py)) — scores on a local
-  Ollama / LM Studio server (`JOBCUT_OLLAMA_URL`, default `localhost:11434`).
-  Free, private, no key.
-- **`llm_api`** ([llm_api.py](../src/jobcut/scoring/llm_api.py)) — OpenAI/Anthropic
-  hook (bring your own key, via the `[llm]` extra). Higher quality, per-job cost.
-- **`claude_skills`** — scores written by a Claude Code / Cowork skill and loaded
-  via `jobcut ingest-scores` (not a live-pipeline scorer; the score is judged in
-  Claude and ingested into the `scores` table tagged `backend=claude_skills`).
+- **`claude_skills`** ([claude_skills.py](../src/jobcut/scoring/claude_skills.py)) — your
+  Claude Code / Cowork skill reads each job, judges it against your profile, and loads the
+  verdicts with `jobcut ingest-scores` (tagged `backend=claude_skills`). Best judgement,
+  no extra cost on a Claude subscription.
 
-You can also calibrate backends side-by-side without touching the live `scores`
-table: `jobcut score --compare` writes to `score_runs` and `jobcut compare`
-prints the agreement table (+ CSV/xlsx in `out/`).
+The distinction that matters is **live**: only `rule_based` scores inside `jobcut score`.
+`claude_skills` is *ingest-first* — the judging happens in Claude, outside jobcut. Selecting
+it is a real choice, not a preference hint: `jobcut score` **stands aside** and points you at
+your skill rather than quietly rubric-scoring rows you expected Claude to judge. Only an
+*unknown* backend (a typo in `config.json`) falls back to `rule_based`.
 
 Each scored job gets a **0–100 score + a one-line reason**. Then the orchestrator:
 

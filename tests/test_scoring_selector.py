@@ -1,4 +1,6 @@
-"""Tests for B3 — choice-card-ready scoring selector (recommended/order + set-backend)."""
+"""Tests for the choice-card scoring selector (recommended/order + set-backend)."""
+
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,33 +13,15 @@ from jobcut.scoring import backend_status
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("JOBCUT_DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("JOBCUT_OLLAMA_URL", raising=False)
-
-    # Default: pretend Ollama is unreachable so the local probe is deterministic
-    # regardless of whether a real server happens to be running on this machine.
-    # (test_recommended_prefers_local_when_reachable overrides this.)
-    def _unreachable(*a, **k):
-        raise OSError("no Ollama in tests")
-    monkeypatch.setattr("urllib.request.urlopen", _unreachable)
-
+    # The claude_skills probe sniffs the environment, and this suite may itself be run
+    # from Claude Code — clear the markers so "not in Claude" is the deterministic
+    # default. (test_recommended_is_claude_skills_inside_claude sets them back.)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    for k in [k for k in os.environ if k.startswith("CLAUDE_CODE")]:
+        monkeypatch.delenv(k, raising=False)
     config.reset_cache()
     yield
     config.reset_cache()
-
-
-class _Resp:
-    status = 200
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-    def read(self):
-        return b"ok"
 
 
 def test_backend_status_is_choice_card_ready():
@@ -45,42 +29,40 @@ def test_backend_status_is_choice_card_ready():
     for r in rows:
         assert isinstance(r["recommended"], bool)
         assert isinstance(r["order"], int)
-    # choice-card order: Free → Local → API → Claude
     order = {r["id"]: r["order"] for r in rows}
-    assert order["rule_based"] < order["local"] < order["llm_api"] < order["claude_skills"]
+    assert order["rule_based"] < order["claude_skills"]     # Free → Claude
 
 
-def test_exactly_one_recommended_defaults_to_rule_based():
-    # no Ollama, no key -> only rule_based is usable -> it's the recommendation
+def test_exactly_one_recommended_outside_claude():
     rows = backend_status()
-    rec = [r["id"] for r in rows if r["recommended"]]
-    assert rec == ["rule_based"]
+    assert [r["id"] for r in rows if r["recommended"]] == ["rule_based"]
 
 
-def test_recommended_prefers_local_when_reachable(monkeypatch):
-    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=None: _Resp())
+def test_recommended_is_claude_skills_inside_claude(monkeypatch):
+    monkeypatch.setenv("CLAUDECODE", "1")
     rows = backend_status()
-    rec = [r["id"] for r in rows if r["recommended"]]
-    assert rec == ["local"]                       # free + private + usable beats the floor
-    assert next(r for r in rows if r["id"] == "local")["usable"] is True
+    assert [r["id"] for r in rows if r["recommended"]] == ["claude_skills"]
 
 
-def test_recommended_is_never_an_unusable_backend():
-    # claude_skills is implemented=False -> never usable -> never recommended
-    rows = backend_status()
-    cs = next(r for r in rows if r["id"] == "claude_skills")
-    assert cs["usable"] is False and cs["recommended"] is False
+def test_claude_skills_is_offered_even_outside_claude():
+    """`available` only drives the recommendation — it must never gate selection:
+    you can pick Claude scoring from a plain terminal and drive it from Claude later."""
+    cs = next(r for r in backend_status() if r["id"] == "claude_skills")
+    assert cs["available"] is False
+    assert cs["recommended"] is False
+    assert cs in backend_status()          # still listed as a card
 
 
 def test_endpoint_exposes_recommended_and_order():
     c = TestClient(create_app(serve_web=False))
     rows = c.get("/api/scoring/backends").json()
-    assert all({"recommended", "order"} <= set(r) for r in rows)
+    assert all({"recommended", "order", "live", "note"} <= set(r) for r in rows)
+    assert [r["id"] for r in rows] == ["rule_based", "claude_skills"]
     assert [r["id"] for r in rows if r["recommended"]] == ["rule_based"]
 
 
 def test_set_backend_via_config_put():
     c = TestClient(create_app(serve_web=False))
-    r = c.put("/api/config", json={"config": {"scoring": {"backend": "local"}}})
+    r = c.put("/api/config", json={"config": {"scoring": {"backend": "claude_skills"}}})
     assert r.status_code == 200
-    assert c.get("/api/config").json()["scoring"]["backend"] == "local"
+    assert c.get("/api/config").json()["scoring"]["backend"] == "claude_skills"

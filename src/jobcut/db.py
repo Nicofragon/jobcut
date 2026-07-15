@@ -23,7 +23,11 @@ import pandas as pd
 
 from . import paths, status
 
-SCHEMA_VERSION = 8
+# v9: fresh DBs no longer create `score_runs` (the compare/calibration sidecar went away
+# with the local+llm_api backends). Deliberately NOT dropped on existing DBs: it holds
+# real calibration rows and jobcut never deletes user data. It is simply inert — nothing
+# reads or writes it, and a fresh install never grows one.
+SCHEMA_VERSION = 9
 
 
 def _now_iso() -> str:
@@ -68,8 +72,9 @@ JOB_COLS = [
 # fields refreshed when a known offer reappears (everything else stays stable)
 VOLATILE = ["last_seen", "applicants", "job_state"]
 
-# `backend` (v4): which scorer produced this row (rule_based|local|llm_api|claude_skills).
-# "" for rows written before v4. Additive — does not change scoring behaviour.
+# `backend` (v4): which scorer produced this row (rule_based|claude_skills). "" for rows
+# written before v4. Free text, no CHECK: historical rows may carry ids that jobcut no
+# longer offers (`local`, `llm_api` — removed in v9) and must keep rendering.
 SCORE_COLS = ["job_id", "canonical_id", "match_score", "match_reasons", "status", "scored_date", "backend"]
 
 # applications: user-owned application status. Separate from `scores` (derived) so a
@@ -94,11 +99,6 @@ APPLICATION_EVENT_COLS = ["event_id", "job_id", "ts", "kind", "from_status", "to
 APPLICATION_DOCUMENT_COLS = ["doc_id", "job_id", "event_id", "doc_type", "title", "body",
                             "created_at", "updated_at", "supersedes_id", "client_key",
                             "archived_at", "meta"]
-
-# score_runs (v3): calibration sidecar. One row per (job_id, backend) so several
-# backends can be compared side-by-side. ADDITIVE — never touches `scores` (the
-# single-backend production table) or its behaviour. Written only by compare mode.
-SCORE_RUN_COLS = ["job_id", "backend", "match_score", "match_reasons", "scored_at"]
 
 # salary_estimates (v7): a Claude/Cowork-produced salary band for offers where the
 # employer did NOT disclose one. Its OWN table (like `scores`) — derived + re-derivable,
@@ -167,14 +167,6 @@ def init_schema(conn: sqlite3.Connection) -> None:
           "notes" TEXT DEFAULT '',
           "source" TEXT DEFAULT 'manual'
         );
-        CREATE TABLE IF NOT EXISTS score_runs (
-          "job_id" TEXT,
-          "backend" TEXT,
-          "match_score" INTEGER,
-          "match_reasons" TEXT,
-          "scored_at" TEXT,
-          PRIMARY KEY ("job_id", "backend")
-        );
         CREATE TABLE IF NOT EXISTS application_events (
           "event_id" INTEGER PRIMARY KEY AUTOINCREMENT,
           "job_id" TEXT NOT NULL,
@@ -213,7 +205,6 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_jobs_first_seen ON jobs(first_seen);
         CREATE INDEX IF NOT EXISTS idx_scores_date ON scores(scored_date);
         CREATE INDEX IF NOT EXISTS idx_applications_category ON applications(status_category);
-        CREATE INDEX IF NOT EXISTS idx_score_runs_backend ON score_runs(backend);
         CREATE INDEX IF NOT EXISTS idx_app_events_job ON application_events(job_id);
         CREATE INDEX IF NOT EXISTS idx_app_docs_job ON application_documents(job_id);
         CREATE INDEX IF NOT EXISTS idx_app_docs_event ON application_documents(event_id);
@@ -381,35 +372,6 @@ def get_job_row(conn: sqlite3.Connection, job_id: str):
 def get_score_row(conn: sqlite3.Connection, job_id: str):
     """One score row by primary key (O(1))."""
     return conn.execute("SELECT * FROM scores WHERE job_id = ?", (str(job_id),)).fetchone()
-
-
-# --- score_runs: multi-backend calibration sidecar (v3) ---------------------
-
-def upsert_score_runs(conn: sqlite3.Connection, rows: list[dict]) -> int:
-    """Upsert calibration rows by (job_id, backend) (last write wins). Returns count.
-
-    Additive: this never reads or writes the `scores` table, so the normal
-    single-backend scoring path is untouched.
-    """
-    if not rows:
-        return 0
-    sql = (
-        f'INSERT INTO score_runs ({",".join(chr(34)+c+chr(34) for c in SCORE_RUN_COLS)}) '
-        f'VALUES ({",".join("?" * len(SCORE_RUN_COLS))}) '
-        f'ON CONFLICT(job_id, backend) DO UPDATE SET '
-        + ", ".join(f'"{c}" = excluded."{c}"' for c in SCORE_RUN_COLS if c not in ("job_id", "backend"))
-    )
-    conn.executemany(sql, [[r.get(c, "") for c in SCORE_RUN_COLS] for r in rows])
-    conn.commit()
-    return len(rows)
-
-
-def read_score_runs(conn: sqlite3.Connection) -> pd.DataFrame:
-    """The score_runs table as a DataFrame (job_id as str)."""
-    df = pd.read_sql_query("SELECT * FROM score_runs", conn)
-    if not df.empty:
-        df["job_id"] = df["job_id"].astype(str)
-    return df
 
 
 # --- applications: user-owned status (the funnel) ---------------------------

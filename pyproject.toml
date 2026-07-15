@@ -36,7 +36,8 @@ dependencies = [
 api = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "python-multipart>=0.0.9"]
 # Optional CV import (PDF/DOCX text extraction). Plain text/markdown need no extra.
 cv = ["pypdf>=4", "python-docx>=1"]
-# Optional LLM scoring backend (scoring/llm_api.py) and AI CV drafting.
+# Optional AI polish: CV → profile drafting (cv.py) + interview-round extraction
+# (process.py). Scoring never needs this — see llm.py.
 llm = ["openai>=1", "anthropic>=0.40"]
 # Streamlit dashboard (dashboard/app.py).
 dashboard = ["streamlit>=1.30"]

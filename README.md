@@ -50,10 +50,9 @@ your real jobs, profile, and applications never leave your machine.
   (separate from derived `scores`), so a re-score never clobbers your funnel.
 - **Role-agnostic & profile-driven.** Searches and the scoring rubric are *derived from
   your `profile.md`* — nothing is hardcoded to any field (works for a nurse or a data analyst).
-- **Pluggable scoring** via a `Scorer` interface: `rule_based` (the **default** — pure
-  Python, no key, no cost), plus optional `local` (Ollama / LM Studio, free), `llm_api`
-  (bring your own key), and `claude_skills` (Claude scores via the CLI) tiers — pick one in
-  Settings; everything falls back to `rule_based`.
+- **Two ways to score, both free.** `rule_based` (the **default** — a transparent pure-Python
+  rubric: no key, no cost, works offline) or `claude_skills` (your Claude Code / Cowork skill
+  reads each job and loads its verdicts via `jobcut ingest-scores`). Pick one in Settings.
 - **100% local.** Your data and secrets never leave the machine — except the scraper call
   to Apify (which is only ever triggered with explicit confirmation).
 

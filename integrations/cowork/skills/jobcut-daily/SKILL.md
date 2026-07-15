@@ -68,11 +68,12 @@ same path the dashboard's "Find new jobs" uses.
    (`status` is optional and defaults to `scored`; use `discarded` for clear non-fits.
    `ingest-scores` tags the rows `backend=claude_skills` → they show "Scored by Claude".)
 
-   **B) No Claude (deterministic).** Use the configured backend (rule_based / local /
-   llm_api per `config.scoring.backend`):
+   **B) No Claude (deterministic).** Score with the local rubric:
    ```
    jobcut score
    ```
+   (This is a no-op if `config.scoring.backend` is `claude_skills` — that setting means
+   "Claude does the scoring", so `jobcut score` stands aside and points back to path A.)
 
 3. **Surface.** Get the ranked shortlist as data and present it:
    ```

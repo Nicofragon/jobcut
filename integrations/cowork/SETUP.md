@@ -90,8 +90,8 @@ Then, in `$JOBCUT_DATA_DIR`:
 - **`.env`** — set `APIFY_TOKEN=apify_api_...`.
 - **`profile.md`** — your roles, skills, must-haves, dealbreakers (drives scoring).
 - **`config/config.json`** — your geography under `routing` and your scoring backend
-  under `scoring.backend` (`rule_based` works with no key; `local`/`llm_api`/Claude
-  are optional tiers).
+  under `scoring.backend`: `rule_based` (a local rubric — `jobcut score` does the work)
+  or `claude_skills` (you score with the `jobcut-score` skill). Both are free.
 - **`searches/*.json`** — one file per saved search (the input for the Apify actor).
   `jobcut init` drops example files; edit them to your titles/locations.
 

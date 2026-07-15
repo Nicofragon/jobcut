@@ -1,14 +1,14 @@
-"""claude_skills — adapter for Claude Code / Cowork users (ingest-first, A3).
+"""claude_skills — the Claude Code / Cowork scoring path (ingest-first).
 
-Delegates scoring to the user's own job-scoring skill/subagents (zero marginal
-cost for a Claude subscriber, highest quality). Not portable as a default — it's
-a tier, not the floor.
+Delegates scoring to your own job-scoring skill: it reads each job, judges it
+against your profile, and loads the results with ``jobcut ingest-scores``. Zero
+marginal cost on a Claude subscription, and the best judgement jobcut can offer.
 
-This backend is **ingest-first**: it does NOT score inside the live pipeline.
-The skill runs outside jobcut and emits a JSON of scores, loaded with
-``jobcut ingest-scores``. So `claude_skills` stays implemented=False in the
-registry — `jobcut score` degrades to rule_based — and score() below is only a
-signpost for anyone who constructs the scorer directly.
+This backend is **ingest-first**: it does NOT score inside the live pipeline, so
+`registry` marks it ``live=False`` and `resolve_scorer` returns no scorer for it.
+That is deliberate — selecting it makes `jobcut score` stand aside and point you
+at your skill, rather than quietly rubric-scoring rows you expected Claude to
+judge. `score()` below is only a signpost for anyone constructing it directly.
 """
 
 from __future__ import annotations

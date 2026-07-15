@@ -212,9 +212,6 @@ rest is stable. **Never deleted.**
 `canonical_id, match_score, match_reasons, status` (`scored` | `discarded`),
 `scored_date`.
 
-**`score_runs`** — multi-backend calibration runs (`jobcut score --compare`):
-several rows per `job_id` (one per backend), **without touching** the `scores` table.
-
 **`applications`** — **truth written by you** (the funnel), kept separate from `scores` so
 that a re-score never overwrites it. PK `job_id` (no FK → supports manual entries):
 `status, status_category, applied_at` (set once), `updated_at` (refreshed),
@@ -291,9 +288,9 @@ on its own** — you review and confirm.
 
 ## 9. The scoring (rubric)
 
-**Pluggable** via the `Scorer` interface. There are **four backends**, selectable in
-`config.scoring.backend`; if the chosen one isn't available, it falls back to `rule_based` (the floor).
-Default backend: `rule_based` (pure Python, no key, no cost, transparent).
+**Pluggable** via the `Scorer` interface. There are **two backends**, selectable in
+`config.scoring.backend` — `rule_based` (the default: pure Python, no key, no cost,
+transparent) and `claude_skills`. Both are free; they differ in *where* the judging happens.
 
 ### `rule_based` — components and weights (editable in `config.json`)
 
@@ -311,21 +308,21 @@ Default backend: `rule_based` (pure Python, no key, no cost, transparent).
 Everything above (titles, skills, signals, dealbreakers, geography) **comes from your
 profile** — there are no hardcoded role lists. Each score carries a one-line reason.
 
-### The other backends
+### `claude_skills` — the other backend
 
-- **`local`** — scores against an **Ollama / LM Studio** server on localhost
-  (`JOBCUT_OLLAMA_URL`, default `http://localhost:11434`). Free, private, no key. If
-  it doesn't respond, it falls back to `rule_based`.
-- **`llm_api`** — scores with an LLM (your key, via the `[llm]` extra, Anthropic/OpenAI); it asks for
-  `{score, reason}` JSON. Better quality, cost per listing. With no key configured it falls back to the
-  default.
-- **`claude_skills`** — the scores are written by a **Claude Code / Cowork skill**
-  (`jobcut-score`) and loaded with `jobcut ingest-scores` (tagged
-  `backend=claude_skills`). It's not a live-pipeline scorer: the judgment happens in
-  Claude and is ingested into the `scores` table.
+The scores are written by a **Claude Code / Cowork skill** (`jobcut-score`) and loaded with
+`jobcut ingest-scores` (tagged `backend=claude_skills`). Best judgement, and no extra cost on
+a Claude subscription.
 
-> **Calibration:** `jobcut score --compare` scores with every usable backend into `score_runs`
-> (without touching `scores`) and `jobcut compare` prints the agreement table + CSV/xlsx in `out/`.
+It is **ingest-first**, not a live-pipeline scorer: the judging happens in Claude, outside
+jobcut. So selecting it makes **`jobcut score` stand aside** — it prints a pointer to your
+skill and writes nothing, rather than quietly rubric-scoring rows you expected Claude to
+judge. Run your skill, then ingest. Only an *unknown* backend (a typo in `config.json`) falls
+back to `rule_based`.
+
+> **Provenance:** every row in `scores` carries the `backend` that produced it. The column is
+> free text and unvalidated, so rows written by backends jobcut no longer ships (`local`,
+> `llm_api` — removed in v9) keep their history and still render in the console.
 
 ---
 
@@ -446,8 +443,6 @@ don't require confirmation. Interactive docs: `http://<host>:<port>/docs`.
 jobcut init [--no-input]    # scaffold the data dir (idempotent)
 jobcut pull [--read]        # pull from Apify (no flag = PAID; --read = free re-download)
 jobcut score                # filter the funnel + score against the profile
-jobcut score --compare [--backends a,b] [--limit N]   # multi-backend calibration → score_runs
-jobcut compare [--json]     # backend agreement table + CSV/xlsx in out/
 jobcut surface [--json]     # writes out/shortlist.md + .csv (or JSON to stdout)
 jobcut market [--json]      # writes out/market-gaps.md + dashboard + history
 jobcut stats                # funnel KPIs as JSON (read-only)
@@ -515,7 +510,7 @@ Next.js console is the main frontend.
   "routing": { "home": "<regex>", "region": "<regex>" },   // hireable geography
   "filter":  { "include_titles": "<regex>" },              // titles worth scoring
   "scoring": {
-    "backend": "rule_based",                                // rule_based | local | llm_api | claude_skills
+    "backend": "rule_based",                                // rule_based | claude_skills
     "weights": { "title":30,"stack":20,"location":15,"signals":10,
                  "employer":10,"reachable":10,"dealbreaker":-20 },
     "signals": [],            // bonus patterns (derived from nice-to-have)
@@ -544,7 +539,8 @@ API base in the front end).
 | A generated search returns nothing | The `geoId` was left as `REPLACE_ME`. Edit `searches/*.json` with your real LinkedIn geoId. |
 | A nurse/non-data role scores low | Regenerate the targeting from your `profile.md` (Settings → Profile → Regenerate) and re-score. |
 | A PDF CV won't read | Install the extra: `pip install -e '.[cv]'` (or paste the text). |
-| `llm_api` errors | It needs `[llm]` + a key (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`). Or use `rule_based`. |
+| `jobcut score` writes nothing and mentions a skill | `scoring.backend` is `claude_skills`, which scores in Claude — run your `jobcut-score` skill, or switch to `rule_based` in Settings. |
+| CV import doesn't draft a profile | That's the optional AI layer: it needs `[llm]` + a key (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`). Without it the import still works, just without drafting. |
 
 ---
 

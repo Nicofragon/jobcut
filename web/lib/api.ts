@@ -362,14 +362,16 @@ export const updateStructuredSearch = (name: string, s: Partial<StructuredSearch
 export const previewActorInput = (s: Partial<StructuredSearch>) =>
   api<Record<string, unknown>>("/searches/preview", { method: "POST", body: JSON.stringify(s) });
 
-// Scoring backends (B3) — choice-card data (recommended/order/usable/reason).
+// Scoring backends — choice-card data. Both backends are always selectable; `live`
+// is the real distinction (false = scores arrive via `jobcut ingest-scores`).
+// `available` only means "we detected Claude Code / Cowork", and drives `recommended`.
 export type ScoringBackend = {
   id: string;
   label: string;
   description: string;
+  live: boolean;
   available: boolean;
-  usable: boolean;
-  reason: string;
+  note: string;
   order: number;
   recommended: boolean;
 };

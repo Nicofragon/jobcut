@@ -1,23 +1,26 @@
 """Pluggable scoring backends.
 
 A `Scorer` takes a job (dict of flattened columns) + the user's profile and
-returns a `JobScore` (0–100 + a one-line reason). Backends are selected by
-config:
+returns a `JobScore` (0–100 + a one-line reason). Two backends ship, selected by
+``config.scoring.backend``:
 
-  - rule_based   — default, pure Python, no API key (the floor; must always work).
-  - llm_api      — optional OpenAI/Anthropic hook (bring your own key).
-  - claude_skills — optional adapter for Claude Code / Claude skills users.
+  - rule_based    — the floor: pure Python, no key, scores inside `jobcut score`.
+  - claude_skills — ingest-first: your Claude skill scores outside jobcut and the
+                    results arrive via `jobcut ingest-scores`.
 
-PHASE 1 implements the backends. This package currently ships the interface
-(`base`) and stubs.
+Only `rule_based` is *live* (see registry.py). Picking `claude_skills` is a real
+choice, not an alias for the rubric: `resolve_scorer` returns **no scorer** for
+it, so `jobcut score` stands aside and points you at your skill instead of
+quietly rubric-scoring rows you expected Claude to judge.
 """
 
 from dataclasses import dataclass
 
 from .base import JobScore, Scorer
-from .registry import backend_status
+from .registry import backend_status, known_backends
 
-__all__ = ["JobScore", "Scorer", "get_scorer", "resolve_scorer", "ResolveInfo", "backend_status"]
+__all__ = ["JobScore", "Scorer", "get_scorer", "resolve_scorer", "ResolveInfo",
+           "backend_status", "known_backends"]
 
 
 def get_scorer(backend: str = "rule_based", **kwargs) -> Scorer:
@@ -25,17 +28,11 @@ def get_scorer(backend: str = "rule_based", **kwargs) -> Scorer:
     if backend == "rule_based":
         from .rule_based import RuleBasedScorer
         return RuleBasedScorer(**kwargs)
-    if backend == "llm_api":
-        from .llm_api import LLMApiScorer
-        return LLMApiScorer(**kwargs)
-    if backend == "local":
-        from .local import LocalScorer
-        return LocalScorer(**kwargs)
     if backend == "claude_skills":
         from .claude_skills import ClaudeSkillsScorer
         return ClaudeSkillsScorer(**kwargs)
     raise ValueError(f"Unknown scoring backend: {backend!r} "
-                     "(expected 'rule_based', 'llm_api', 'local' or 'claude_skills')")
+                     "(expected 'rule_based' or 'claude_skills')")
 
 
 @dataclass
@@ -44,28 +41,27 @@ class ResolveInfo:
 
     requested: str
     effective: str
-    fell_back: bool
+    live: bool          # False -> no scorer; scores arrive via `jobcut ingest-scores`
+    fell_back: bool     # True only when `requested` was not a known backend
     reason: str
 
 
-def resolve_scorer(cfg: dict, **kwargs) -> tuple[Scorer, ResolveInfo]:
-    """Build the scorer for ``cfg["scoring"]["backend"]``, degrading to rule_based.
+def resolve_scorer(cfg: dict, **kwargs) -> tuple[Scorer | None, ResolveInfo]:
+    """Build the scorer for ``cfg["scoring"]["backend"]``.
 
-    If the requested backend is *usable* (implemented AND available) it is built
-    directly. Otherwise we fall back to ``rule_based`` (the floor) and report the
-    motive in ResolveInfo. ``kwargs`` are the rule_based kwargs (taxonomy, weights,
-    …) used whenever the effective backend is rule_based.
+    Returns ``(None, info)`` when the configured backend is not live (i.e.
+    `claude_skills`) — the caller must not score. An *unknown* backend still
+    degrades to `rule_based` (the floor) so a typo can't break the pipeline.
+    ``kwargs`` are the rule_based kwargs (taxonomy, weights, …).
     """
     requested = (cfg.get("scoring") or {}).get("backend", "rule_based")
-    status = {b["id"]: b for b in backend_status()}
-    entry = status.get(requested)
+    entry = {b["id"]: b for b in backend_status()}.get(requested)
 
-    if entry and entry["usable"]:
-        info = ResolveInfo(requested, requested, False, "")
-    else:
-        reason = entry["reason"] if entry else f"unknown backend {requested!r}"
-        info = ResolveInfo(requested, "rule_based", True, reason)
-
-    if info.effective == "rule_based":
+    if entry is None:
+        info = ResolveInfo(requested, "rule_based", True, True, f"unknown backend {requested!r}")
         return get_scorer("rule_based", **kwargs), info
-    return get_scorer(info.effective), info
+
+    if not entry["live"]:
+        return None, ResolveInfo(requested, requested, False, False, entry["note"])
+
+    return get_scorer(requested, **kwargs), ResolveInfo(requested, requested, True, False, "")
