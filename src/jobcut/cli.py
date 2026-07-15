@@ -72,51 +72,8 @@ def cmd_pull(args) -> int:
 
 
 def cmd_score(args) -> int:
-    if getattr(args, "compare", False):
-        from .scoring import compare
-        backends = [b.strip() for b in args.backends.split(",") if b.strip()] if args.backends else None
-        summary = compare.run_compare(backends=backends, limit=args.limit,
-                                      progress=lambda e: print(f"compare · {e['message']}"))
-        ran = ", ".join(summary["backends"]) or "(none usable)"
-        print(f"score --compare · backends [{ran}] over {summary['jobs']} jobs "
-              f"-> {summary['rows_written']} score_runs rows")
-        if summary["skipped"]:
-            print(f"  · skipped (not usable now): {', '.join(summary['skipped'])}")
-        print("  → run `jobcut compare` for the side-by-side table + CSV/xlsx export")
-        return 0
     from . import score
     score.run()
-    return 0
-
-
-def cmd_compare(args) -> int:
-    """Show the multi-backend comparison from score_runs (table + CSV/xlsx export)."""
-    from . import db
-    from .scoring import compare
-    conn = db.connect()
-    try:
-        report = compare.compare_report(conn)
-        if getattr(args, "json", False):
-            import json
-            print(json.dumps(report, ensure_ascii=False, indent=1))
-            return 0
-        if report["empty"]:
-            print("compare · no score_runs yet — run `jobcut score --compare` first")
-            return 0
-        paths_written = compare.write_exports(report)
-    finally:
-        conn.close()
-
-    s = report["summary"]
-    print(f"compare · {s.get('jobs', 0)} jobs across backends [{', '.join(report['backends'])}]")
-    if "agree_pct" in s:
-        print(f"  · {s['pair']}: {s['agree_within_5']}/{s['compared']} agree within 5 "
-              f"({s['agree_pct']}%), {s['disagreements_over_20']} disagree by >20, "
-              f"mean Δ {s['mean_delta']}, correlation {s['correlation']}")
-    elif "note" in s:
-        print(f"  · {s['note']}")
-    print(f"  → {paths_written['csv']}")
-    print(f"  → {paths_written['xlsx']}")
     return 0
 
 
@@ -937,21 +894,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp.set_defaults(func=cmd_pull)
 
     psc = sub.add_parser("score", help="filter the funnel and score it against your profile")
-    psc.add_argument("--compare", action="store_true",
-                     help="calibration mode: score with every usable backend into score_runs "
-                          "(does NOT touch the normal scores table)")
-    psc.add_argument("--backends", default=None,
-                     help="comma-separated backends to compare (e.g. rule_based,local); "
-                          "default: every usable live backend")
-    psc.add_argument("--limit", type=int, default=None,
-                     help="compare only the first N representatives (calibration sample; "
-                          "useful when a slow local backend would take hours)")
     psc.set_defaults(func=cmd_score)
-
-    pc = sub.add_parser("compare",
-                        help="show the multi-backend comparison (table + CSV/xlsx in out/)")
-    pc.add_argument("--json", action="store_true", help="print the comparison as JSON to stdout (read-only)")
-    pc.set_defaults(func=cmd_compare)
 
     pis = sub.add_parser("ingest-scores",
                          help="upsert scores from a JSON file (e.g. a Claude/Cowork scoring skill)")

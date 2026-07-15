@@ -84,11 +84,11 @@ def _has_table(conn, name) -> bool:
 def test_fresh_db_is_current(conn):
     assert _schema_version(conn) == str(db.SCHEMA_VERSION)
     assert _has_table(conn, "applications")
-    assert _has_table(conn, "score_runs")
+    assert not _has_table(conn, "score_runs")   # calibration sidecar, removed in v9
 
 
 def test_migration_v1_to_current(tmp_path):
-    # Build a raw "v1" DB: jobs + _meta(=1), with data, NO applications/score_runs table.
+    # Build a raw "v1" DB: jobs + _meta(=1), with data, NO applications table.
     p = tmp_path / "v1.db"
     raw = sqlite3.connect(str(p))
     raw.executescript(
@@ -104,7 +104,6 @@ def test_migration_v1_to_current(tmp_path):
     try:
         assert _schema_version(conn) == str(db.SCHEMA_VERSION)
         assert _has_table(conn, "applications")
-        assert _has_table(conn, "score_runs")
         # existing data preserved (additive migrations only)
         assert conn.execute("SELECT title FROM jobs WHERE job_id='1'").fetchone()[0] == "Old Job"
     finally:
@@ -443,7 +442,7 @@ def test_stage_durations_handles_mixed_naive_and_aware(conn):
 
 def test_v8_schema_has_documents_table(conn):
     assert _has_table(conn, "application_documents")
-    assert _schema_version(conn) == "8"
+    assert _schema_version(conn) == str(db.SCHEMA_VERSION)
 
 
 def test_document_insert_and_get(conn):
@@ -509,6 +508,31 @@ def test_document_archive_and_restore(conn):
     assert db.set_document_archived(conn, 99999) is None              # unknown id
 
 
+def test_v9_leaves_an_existing_score_runs_table_alone(tmp_path):
+    """v9 stopped creating `score_runs`, but must never drop one that already exists:
+    it holds real calibration rows and jobcut does not delete user data. Inert, not gone."""
+    p = tmp_path / "v8.db"
+    raw = sqlite3.connect(str(p))
+    raw.executescript(
+        'CREATE TABLE jobs ("job_id" TEXT PRIMARY KEY, "title" TEXT, "first_seen" TEXT);'
+        "CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT);"
+        'CREATE TABLE score_runs ("job_id" TEXT, "backend" TEXT, "match_score" INTEGER,'
+        ' "match_reasons" TEXT, "scored_at" TEXT, PRIMARY KEY ("job_id", "backend"));'
+        "INSERT INTO score_runs VALUES ('1', 'local', 77, 'old calibration', '2026-01-01');"
+        "INSERT INTO _meta(key, value) VALUES ('schema_version', '8');"
+    )
+    raw.commit()
+    raw.close()
+
+    conn = db.connect(p)
+    try:
+        assert _schema_version(conn) == str(db.SCHEMA_VERSION)
+        assert _has_table(conn, "score_runs")
+        assert conn.execute("SELECT match_score FROM score_runs").fetchone()[0] == 77
+    finally:
+        conn.close()
+
+
 def test_documents_migration_v7_to_v8(tmp_path):
     # A pre-v8 DB (v7 schema, no application_documents table) upgrades additively.
     p = tmp_path / "v7.db"
@@ -524,7 +548,7 @@ def test_documents_migration_v7_to_v8(tmp_path):
 
     conn = db.connect(p)
     try:
-        assert _schema_version(conn) == str(db.SCHEMA_VERSION) == "8"
+        assert _schema_version(conn) == str(db.SCHEMA_VERSION)
         assert _has_table(conn, "application_documents")
         assert conn.execute("SELECT title FROM jobs WHERE job_id='1'").fetchone()[0] == "Old Job"
         d = db.upsert_document(conn, job_id="1", title="t", body="b")

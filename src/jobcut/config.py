@@ -35,10 +35,9 @@ DEFAULTS = {
     },
     # Scoring: backend selection + rule_based rubric weights.
     "scoring": {
+        # "rule_based" (scores here) or "claude_skills" (your Claude skill scores and
+        # loads results with `jobcut ingest-scores`). See scoring/registry.py.
         "backend": "rule_based",
-        # local backend (Ollama/LM Studio, OpenAI-compatible). Server URL via
-        # JOBCUT_OLLAMA_URL (default http://localhost:11434). `ollama pull` the model first.
-        "local": {"model": "qwen2.5"},
         "weights": {
             "title": 30,        # title matches a target role
             "stack": 20,        # stack keywords present

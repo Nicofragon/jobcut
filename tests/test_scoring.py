@@ -60,22 +60,6 @@ def test_dealbreaker_penalizes():
     assert dealbroke.match_score < clean.match_score
 
 
-def test_llm_api_parse_tolerates_fences_and_clamps():
-    from jobcut.scoring.llm_api import _parse
-    js = _parse('```json\n{"score": 142, "reason": "great fit"}\n```', "9")
-    assert js.job_id == "9" and js.match_score == 100 and "great fit" in js.match_reasons
-    assert _parse('blah {"score": -5, "reason": ""} trailing', "1").match_score == 0
-
-
-def test_llm_api_requires_a_key(monkeypatch):
-    from jobcut.scoring import get_scorer
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    scorer = get_scorer("llm_api")
-    with pytest.raises(RuntimeError, match="llm_api"):
-        scorer.score({"job_id": "1", "title": "x"}, "profile")
-
-
 def test_score_orchestration_end_to_end():
     from jobcut import score
 
@@ -115,4 +99,26 @@ def test_score_orchestration_end_to_end():
     assert sc[sc.job_id == "200"].iloc[0].status == "discarded"
     # repost inherited the representative's score
     assert int(sc[sc.job_id == "101"].iloc[0].match_score) == int(sc[sc.job_id == "100"].iloc[0].match_score)
+    assert sc[sc.job_id == "100"].iloc[0].backend == "rule_based"   # rows carry their provenance
+    conn.close()
+
+
+def test_score_stands_aside_for_claude_skills(capsys):
+    """Selecting claude_skills must not quietly rubric-score: no scorer runs, no rows land,
+    and the user is told to run their skill. This is the whole point of a non-live backend."""
+    from jobcut import score
+
+    conn = db.connect()
+    rows = {"100": {c: "" for c in db.JOB_COLS}}
+    rows["100"].update(job_id="100", title="Data Analyst", company_name="Acme", location="Madrid, Spain",
+                       workplace_type="hybrid", description="SQL Python",
+                       first_seen="2026-01-01", last_seen="2026-01-01")
+    db.upsert_jobs(conn, rows, "2026-01-01")
+    config.update({"scoring": {"backend": "claude_skills"}})
+
+    summary = score.run(conn)
+    assert summary["skipped"] is True
+    assert summary["rows_written"] == 0
+    assert db.read_scores(conn).empty          # nothing was scored behind the user's back
+    assert "ingest-scores" in capsys.readouterr().out
     conn.close()

@@ -44,20 +44,30 @@ def test_ingest_tags_backend(tmp_path):
     # default backend is claude_skills; a per-entry backend overrides it
     path = _write(tmp_path, [
         {"job_id": "1", "match_score": 80},
-        {"job_id": "2", "match_score": 60, "backend": "local"},
+        {"job_id": "2", "match_score": 60, "backend": "my_own_scorer"},
     ])
     ingest.ingest_scores(path, conn)
     sc = db.read_scores(conn)
     assert sc[sc.job_id == "1"].iloc[0].backend == "claude_skills"
-    assert sc[sc.job_id == "2"].iloc[0].backend == "local"
+    assert sc[sc.job_id == "2"].iloc[0].backend == "my_own_scorer"
     conn.close()
 
 
 def test_ingest_backend_arg_overrides_default(tmp_path):
     conn = db.connect()
     path = _write(tmp_path, [{"job_id": "1", "match_score": 80}])
-    ingest.ingest_scores(path, conn, backend="llm_api")
-    assert db.read_scores(conn).iloc[0].backend == "llm_api"
+    ingest.ingest_scores(path, conn, backend="my_own_scorer")
+    assert db.read_scores(conn).iloc[0].backend == "my_own_scorer"
+    conn.close()
+
+
+def test_ingest_backend_is_free_text_not_a_registry_id(tmp_path):
+    """`backend` is a provenance label, deliberately unvalidated: retired ids (`local`)
+    and third-party scorers must round-trip so old rows keep their history."""
+    conn = db.connect()
+    path = _write(tmp_path, [{"job_id": "1", "match_score": 80, "backend": "local"}])
+    ingest.ingest_scores(path, conn)
+    assert db.read_scores(conn).iloc[0].backend == "local"
     conn.close()
 
 

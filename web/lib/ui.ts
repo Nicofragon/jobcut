@@ -26,11 +26,13 @@ export function scoreColor(score: number | null): string {
 
 // Friendly label for the scoring backend that produced a score (db `scores.backend`).
 // Returns null when unknown/empty so the UI can skip the badge.
+// `local` and `llm_api` are no longer offered, but scores produced by them before they
+// were removed still sit in the db — keep labelling those rows instead of leaking the id.
 const SCORER_LABELS: Record<string, string> = {
   rule_based: "Rule-based",
+  claude_skills: "Claude",
   local: "Local AI",
   llm_api: "API",
-  claude_skills: "Claude",
 };
 export function scorerLabel(backend: string | null | undefined): string | null {
   if (!backend) return null;

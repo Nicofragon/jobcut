@@ -2,8 +2,11 @@
 
 Wraps anthropic / openai IF the library is installed and a key is available
 (environment or <data>/.env). Returns None when no LLM is configured, so every
-caller degrades gracefully to a deterministic floor. Reused by the CV importer
-(profile drafting) and, later, the llm_api scorer.
+caller degrades gracefully to a deterministic floor.
+
+Used by the CV importer (profile drafting, cv.py) and interview-round extraction
+(process.py) — NOT by scoring, which is rule_based (pure Python) or claude_skills
+(judged in Claude). So the `[llm]` extra is optional polish, never on the scoring path.
 """
 
 from __future__ import annotations

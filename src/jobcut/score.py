@@ -39,7 +39,11 @@ def _rule_based_kwargs(cfg: dict) -> dict:
 
 
 def build_scorer(cfg: dict):
-    """Resolve the configured backend to a Scorer, degrading to rule_based."""
+    """Resolve the configured backend to a Scorer.
+
+    None when the configured backend is ingest-first (claude_skills) and so has
+    no live scorer — see scoring.resolve_scorer.
+    """
     return resolve_scorer(cfg, **_rule_based_kwargs(cfg))[0]
 
 
@@ -55,14 +59,26 @@ def run(conn=None, progress=None) -> dict:
     today = datetime.date.today().isoformat()
     cfg = config.load()
 
+    scorer, info = resolve_scorer(cfg, **_rule_based_kwargs(cfg))
+    if scorer is None:
+        # Ingest-first backend (claude_skills): scoring happens in Claude, not here.
+        # Stand aside rather than rubric-score rows the user expects Claude to judge.
+        msg = (f"backend {info.requested!r} scores outside the pipeline — run your "
+               f"Claude Code / Cowork scoring skill, then load the results with "
+               f"`jobcut ingest-scores <scores.json>`")
+        emit({"stage": "done", "message": msg, "skipped": True})
+        print(f"score · skipped: {msg}")
+        if own:
+            conn.close()
+        return {"scored": 0, "reposts": 0, "discarded": 0, "rows_written": 0,
+                "skipped": True, "backend": info.requested}
+
     emit({"stage": "filter", "message": "selecting the funnel to score"})
     sel = _filter.select(conn)
     reps = sel["reps"]
     profile = load_profile()
-    scorer, info = resolve_scorer(cfg, **_rule_based_kwargs(cfg))
     if info.fell_back:
-        msg = (f"backend {info.requested!r} unavailable ({info.reason}); "
-               f"using {info.effective}")
+        msg = f"{info.reason}; using {info.effective}"
         emit({"stage": "score", "message": msg, "fell_back": True})
         print(f"score · fallback: {msg}")
 
