@@ -73,6 +73,18 @@ def put_profile_structured(fields: profile_mod.ProfileFields):
     return profile_mod.to_structured(md)
 
 
+@router.get("/profile/kit")
+def get_kit():
+    """The live skills kit (config/taxonomy.json) as a flat list — the base that actually
+    drives scoring + Discovery. Read-only; truthful even when profile.md uses custom headings."""
+    tax = config.load_taxonomy()
+    skills = [{"name": k, "status": v.get("status", ""), "category": v.get("cat", "other"),
+               "close_via": v.get("close_via", "")}
+              for k, v in (tax.get("skills") or {}).items()]
+    counts = {s: sum(1 for x in skills if x["status"] == s) for s in ("have", "partial", "gap")}
+    return {"skills": skills, "counts": counts}
+
+
 @router.get("/profile/derived")
 def get_derived():
     """Preview the searches + rubric derived from profile.md (no file writes)."""

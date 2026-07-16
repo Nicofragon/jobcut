@@ -276,6 +276,11 @@ export type ProfileFields = {
   skills: string[];
   gaps: string[]; // skills you're missing / learning — power Discovery's gap analysis
 };
+// The live skills kit (config/taxonomy.json) — the base that drives scoring + Discovery.
+export type KitSkill = { name: string; status: string; category: string; close_via: string };
+export type SkillsKit = { skills: KitSkill[]; counts: { have: number; partial: number; gap: number } };
+export const getKit = () => api<SkillsKit>("/profile/kit");
+
 export const getProfileStructured = () => api<ProfileFields>("/profile/structured");
 export const putProfileStructured = (fields: ProfileFields) =>
   api<ProfileFields>("/profile/structured", { method: "PUT", body: JSON.stringify(fields) });
