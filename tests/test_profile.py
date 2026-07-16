@@ -94,6 +94,34 @@ def test_derive_taxonomy_and_signals():
     assert cfg["scoring"]["dealbreakers"]            # best-effort from dealbreakers
 
 
+def test_ingest_profile_writes_md_and_derives_rich_kit(tmp_path):
+    from jobcut import ingest
+    payload = {
+        "target_roles": ["Senior Data Analyst"], "seniority": "~8y senior IC",
+        "locations": ["Madrid, Spain"], "work_types": ["remote"], "dealbreakers": ["security clearance"],
+        "skills": [
+            {"name": "SQL", "status": "have", "category": "core", "aliases": ["postgres"]},
+            {"name": "Tableau", "status": "partial", "category": "viz"},
+            "Python",                                          # bare string → have/core
+            {"name": "dbt", "status": "gap", "category": "dataeng"},
+        ],
+    }
+    p = tmp_path / "profile.json"
+    p.write_text(json.dumps(payload))
+    s = ingest.ingest_profile(str(p))
+    assert (s["have"], s["partial"], s["gap"]) == (2, 1, 1)
+
+    md = (tmp_path / "profile.md").read_text()
+    assert "## Skill gaps" in md and "dbt" in md and "Senior Data Analyst" in md   # human record
+
+    config.reset_cache()
+    tax = config.load_taxonomy()
+    assert tax["skills"]["SQL"]["status"] == "have" and tax["skills"]["SQL"]["cat"] == "core"
+    assert any("postgres" in pat for pat in tax["skills"]["SQL"]["patterns"])       # alias → pattern
+    assert tax["skills"]["Tableau"]["status"] == "partial" and tax["skills"]["Tableau"]["cat"] == "viz"
+    assert tax["skills"]["dbt"]["status"] == "gap"                                  # gap flowed to kit
+
+
 def test_gap_and_partial_skills_derive_to_taxonomy():
     md = NURSE_MD + "\n## Skill gaps\n- Ventilator management\n"
     pd = profile.parse(md)

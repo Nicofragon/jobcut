@@ -12,11 +12,12 @@ top-to-bottom and have a working bridge.
 
 ## 1. What you're installing
 
-Eleven skills (each a folder under [`skills/`](skills/)):
+Twelve skills (each a folder under [`skills/`](skills/)):
 
 | Skill | What it does |
 |-------|--------------|
 | [`jobcut`](skills/jobcut/SKILL.md) | **Front door.** Run first in a session: confirms the jobcut skills are loaded + the CLI/data dir resolve, says what's missing if not, then routes you to the right skill |
+| [`jobcut-profile`](skills/jobcut-profile/SKILL.md) | **Write.** Build/update the profile by interviewing the user (or from a CV) → writes `profile.md` + the skills kit via `ingest-profile` |
 | [`jobcut-daily`](skills/jobcut-daily/SKILL.md) | `jobcut pull` each saved search (local Apify client, no MCP) → score → `surface` the top matches |
 | [`jobcut-score`](skills/jobcut-score/SKILL.md) | Score (or re-score) jobs already in the DB with Claude, written straight back via `ingest-scores` — no Apify, no manual JSON |
 | [`jobcut-review`](skills/jobcut-review/SKILL.md) | **Read-only.** What to apply to (top 10), pipeline/weekly stats (`stats --json`), or open the web console (`serve --open`) |
