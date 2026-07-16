@@ -71,14 +71,80 @@ def compute(conn) -> dict | None:
             "segcounts": segcounts, "salary": salary, "gaps": gaps, "top": top}
 
 
+# status → how much of the demand it "covers" (have = full, partial = half, gap = none).
+_COVER_WEIGHT = {"have": 1.0, "partial": 0.5, "gap": 0.0}
+
+
+def _load_history():
+    """The per-day skill-demand history (market_history.xlsx), read-only. None if absent."""
+    hp = paths.data_dir() / "market_history.xlsx"
+    if not hp.exists():
+        return None
+    try:
+        return pd.read_excel(hp)
+    except Exception:
+        return None
+
+
+def _trend(h, skills) -> dict:
+    """{skill: percentage-point delta vs the previous snapshot}. Empty with <2 snapshots."""
+    if h is None or getattr(h, "empty", True):
+        return {}
+    today = datetime.date.today().isoformat()
+    prev_dates = sorted(d for d in h.date.unique() if d < today)
+    if not prev_dates:
+        return {}
+    prev = h[h.date == prev_dates[-1]].set_index("skill").pct.to_dict()
+    return {k: v["pct"] - prev[k] for k, v in skills.items() if k in prev}
+
+
+def _coverage(skills, seg_keys) -> dict:
+    """Profile coverage: of the demand (weighted by % of offers), how much you already have.
+
+    Overall + per-segment. Only skills the market actually asks (pct/by_seg > 0) count, so a
+    skill nobody demands neither helps nor hurts. `partial` counts half — some exposure.
+    """
+    def cov(weights: dict) -> int:
+        tot = sum(weights.values())
+        if not tot:
+            return 0
+        got = sum(w * _COVER_WEIGHT.get(skills[k]["status"], 0.0) for k, w in weights.items())
+        return round(100 * got / tot)
+
+    overall = cov({k: v["pct"] for k, v in skills.items() if v["pct"] > 0})
+    by_segment = {}
+    for seg in seg_keys:
+        w = {k: v["by_seg"].get(seg, 0) for k, v in skills.items()}
+        by_segment[seg] = cov({k: x for k, x in w.items() if x > 0})
+    return {"pct": overall, "by_segment": by_segment}
+
+
 def summary(conn) -> dict | None:
-    """The API-facing market view (GET /api/market). None when there are no jobs."""
+    """The API-facing market view (GET /api/market). None when there are no jobs.
+
+    Read-only (no file writes): reads market_history.xlsx if present for the trend, but
+    never writes it — that's `main()`'s job.
+    """
     c = compute(conn)
     if c is None:
         return None
-    return {"total": c["total"], "relevant": c["R"], "segments": c["segcounts"],
-            "top_demand": [{"skill": k, "pct": v["pct"], "status": v["status"]} for k, v in c["top"][:10]],
-            "gaps": [g["skill"] for g in c["gaps"][:8]], "salary_pct": c["salary"]["pct"]}
+    skills = c["skills"]
+    trend = _trend(_load_history(), skills)
+
+    def enrich(k, v):
+        return {"skill": k, "pct": v["pct"], "status": v["status"], "cat": v["cat"],
+                "close_via": v["close_via"], "n": v["n"], "by_seg": v["by_seg"],
+                "trend": trend.get(k)}
+
+    return {
+        "total": c["total"], "relevant": c["R"], "segments": c["segcounts"],
+        "seg_keys": c["seg_keys"], "salary_pct": c["salary"]["pct"],
+        "coverage": _coverage(skills, c["seg_keys"]),
+        "top_demand": [enrich(k, v) for k, v in c["top"][:10]],
+        "gaps": [{"skill": g["skill"], "pct": g["pct"], "status": g["status"],
+                  "close_via": g["close_via"], "n": g["n"], "cat": g["cat"]}
+                 for g in c["gaps"][:8]],
+    }
 
 
 def main(conn=None):
@@ -104,14 +170,8 @@ def main(conn=None):
     h = pd.concat([h, pd.DataFrame(rows)], ignore_index=True)
     h.to_excel(hp, index=False)
 
-    # trend vs previous snapshot
-    prev_dates = sorted([d for d in h.date.unique() if d < today])
-    trend = {}
-    if prev_dates:
-        prev = h[h.date == prev_dates[-1]].set_index("skill").pct.to_dict()
-        for k, v in skills.items():
-            if k in prev:
-                trend[k] = v["pct"] - prev[k]
+    # trend vs previous snapshot (h now includes today's rows; _trend excludes them)
+    trend = _trend(h, skills)
 
     EMO = {"have": "✅", "partial": "🟡", "gap": "🔴"}
     md = [

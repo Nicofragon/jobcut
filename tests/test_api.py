@@ -394,6 +394,20 @@ def test_market(client):
     assert body["relevant"] >= 1
     assert "salary_pct" in body
 
+    # coverage: SQL + Python are `have`, Power BI is a `gap`. All three are demanded
+    # (each offer's description mentions them), so coverage sits between 0 and 100.
+    assert 0 < body["coverage"]["pct"] < 100
+    assert set(body["coverage"]["by_segment"]) == {"data-analyst", "ds-ai"}
+
+    # enriched skills carry the taxonomy detail the flat payload used to drop.
+    sql = next(s for s in body["top_demand"] if s["skill"] == "SQL")
+    assert sql["status"] == "have" and sql["cat"] == "core"
+    assert "by_seg" in sql and "trend" in sql and sql["n"] >= 1
+
+    # gaps are objects now (skill + how to close it), not bare strings.
+    gap = next(g for g in body["gaps"] if g["skill"] == "Power BI")
+    assert gap["status"] == "gap" and gap["close_via"] == "portfolio"
+
 
 def test_export(client):
     body = client.post("/api/export").json()
