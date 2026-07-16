@@ -274,6 +274,7 @@ export type ProfileFields = {
   must_haves: string[];
   dealbreakers: string[];
   skills: string[];
+  gaps: string[]; // skills you're missing / learning — power Discovery's gap analysis
 };
 export const getProfileStructured = () => api<ProfileFields>("/profile/structured");
 export const putProfileStructured = (fields: ProfileFields) =>

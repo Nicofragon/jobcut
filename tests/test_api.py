@@ -412,6 +412,26 @@ def test_credentials_put_and_validate(client):
     assert v["apify"]["valid"] is False
 
 
+# --- profile → kit ----------------------------------------------------------
+
+def test_put_profile_structured_autoderives_kit(client):
+    # Saving the profile re-derives the kit (merge): profile owns status, existing skills survive.
+    r = client.put("/api/profile/structured", json={
+        "target_roles": ["Data Analyst"], "skills": ["SQL"], "must_haves": ["Tableau"],
+        "gaps": ["dbt"], "locations": ["Madrid"], "work_types": ["remote"], "dealbreakers": [],
+    })
+    assert r.status_code == 200
+    assert "dbt" in r.json()["gaps"]
+
+    config.reset_cache()
+    tax = config.load_taxonomy()
+    assert tax["skills"]["dbt"]["status"] == "gap"            # gap skill flowed into the kit
+    assert tax["skills"]["dbt"]["close_via"]                  # gap carries a close_via
+    assert tax["skills"]["Tableau"]["status"] == "partial"    # nice-to-have → partial
+    assert tax["skills"]["SQL"]["status"] == "have"
+    assert "Power BI" in tax["skills"]                        # existing kit skill preserved (merge)
+
+
 # --- market -----------------------------------------------------------------
 
 def test_market(client):

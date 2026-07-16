@@ -40,6 +40,7 @@ const EMPTY_FIELDS: ProfileFields = {
   must_haves: [],
   dealbreakers: [],
   skills: [],
+  gaps: [],
 };
 
 export default function OnboardingPage() {
