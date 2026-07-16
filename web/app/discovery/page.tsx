@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getMarket, regenerateMarket, type Market, type SkillDemand, type SkillGap } from "@/lib/api";
+import {
+  getMarket,
+  regenerateMarket,
+  type Market,
+  type SkillDemand,
+  type SkillGap,
+  type ScoreDistribution,
+} from "@/lib/api";
 import { Icon } from "@/components/icons";
 import { ErrorNote, Loading } from "@/components/States";
 
@@ -141,6 +148,8 @@ export default function DiscoveryPage() {
         </div>
       </section>
 
+      <Heatmap skills={data.top_demand} segKeys={data.seg_keys} segments={data.segments} />
+
       <div className="grid gap-4 md:grid-cols-2">
         <GapPlan
           title="Learn / build"
@@ -156,23 +165,140 @@ export default function DiscoveryPage() {
         />
       </div>
 
-      <section className="rounded-card border border-border bg-surface p-5 shadow-card">
-        <h2 className="mb-3 text-lg font-semibold text-on-surface">Segment mix</h2>
-        <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
-          {Object.entries(data.segments).map(([seg, n]) => (
-            <li key={seg} className="flex justify-between">
-              <span
-                className="text-on-surface-variant"
-                title={seg === "other" ? "Roles that didn't match a known segment" : undefined}
-              >
-                {humanizeSeg(seg)}
-              </span>
-              <span className="font-medium tabular-nums text-on-surface">{n}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Histogram dist={data.score_distribution} />
+
+        <section className="rounded-card border border-border bg-surface p-5 shadow-card">
+          <h2 className="mb-3 text-lg font-semibold text-on-surface">Segment mix</h2>
+          <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+            {Object.entries(data.segments).map(([seg, n]) => (
+              <li key={seg} className="flex justify-between">
+                <span
+                  className="text-on-surface-variant"
+                  title={seg === "other" ? "Roles that didn't match a known segment" : undefined}
+                >
+                  {humanizeSeg(seg)}
+                </span>
+                <span className="font-medium tabular-nums text-on-surface">{n}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </div>
+  );
+}
+
+// Skill (rows) × role segment (cols) demand heatmap. Answers "what to learn depends
+// on which segment I target" — dbt may be 40% in analytics-eng but 5% in data-analyst.
+function Heatmap({
+  skills,
+  segKeys,
+  segments,
+}: {
+  skills: SkillDemand[];
+  segKeys: string[];
+  segments: Record<string, number>;
+}) {
+  const cols = segKeys.filter((s) => (segments[s] ?? 0) > 0);
+  const rows = skills.slice(0, 12);
+  if (!cols.length || !rows.length) return null;
+  const max = Math.max(1, ...rows.flatMap((r) => cols.map((c) => r.by_seg[c] ?? 0)));
+
+  return (
+    <section className="rounded-card border border-border bg-surface p-5 shadow-card">
+      <h2 className="mb-1 text-lg font-semibold text-on-surface">Demand by segment</h2>
+      <p className="mb-4 text-sm text-on-surface-variant">
+        The same skill can matter far more in one role than another — target the column you&apos;re aiming for.
+      </p>
+      <div className="overflow-x-auto">
+        <div
+          className="grid min-w-max gap-1"
+          style={{ gridTemplateColumns: `minmax(9rem,1fr) repeat(${cols.length}, minmax(4.5rem,1fr))` }}
+        >
+          <div aria-hidden />
+          {cols.map((c) => (
+            <div key={c} className="px-1 pb-1 text-center text-xs font-medium text-on-surface-variant" title={humanizeSeg(c)}>
+              {humanizeSeg(c)}
+            </div>
+          ))}
+          {rows.map((r) => (
+            <div key={r.skill} className="contents">
+              <div className="flex items-center gap-1.5 py-1 pr-2 text-sm text-on-surface">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: STATUS_COLOR[r.status] }} />
+                <span className="truncate" title={r.skill}>
+                  {r.skill}
+                </span>
+              </div>
+              {cols.map((c) => {
+                const v = r.by_seg[c] ?? 0;
+                const alpha = v / max; // 0–1 intensity within the shown range
+                return (
+                  <div
+                    key={c}
+                    className="grid place-items-center rounded-md py-1.5 text-xs tabular-nums"
+                    style={{
+                      background: `color-mix(in srgb, var(--color-primary) ${Math.round(alpha * 85)}%, transparent)`,
+                      color: alpha > 0.55 ? "var(--color-on-primary, #fff)" : "var(--color-on-surface)",
+                    }}
+                    title={`${r.skill} · ${humanizeSeg(c)}: ${v}% of offers`}
+                  >
+                    {v ? `${v}%` : "·"}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Match-score distribution of your scored offers — pipeline quality at a glance.
+function Histogram({ dist }: { dist: ScoreDistribution }) {
+  const BAND_COLOR: Record<string, string> = {
+    "Below bar": "var(--color-score-low)",
+    Shortlist: "var(--color-accent-amber)",
+    Top: "var(--color-score-high)",
+  };
+  const maxCount = Math.max(1, ...dist.bands.map((b) => b.count));
+  return (
+    <section className="rounded-card border border-border bg-surface p-5 shadow-card">
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-semibold text-on-surface">Your pipeline</h2>
+        <span className="text-xs text-on-surface-variant">
+          {dist.total} scored · median match {dist.median}
+        </span>
+      </div>
+      <p className="mb-4 text-sm text-on-surface-variant">
+        How your scored offers spread by match — the shortlist floor is 60.
+      </p>
+      {dist.total === 0 ? (
+        <p className="text-sm text-on-surface-variant">Nothing scored yet — run scoring to see your pipeline.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {dist.bands.map((b) => {
+            const pct = Math.round((100 * b.count) / dist.total);
+            const color = BAND_COLOR[b.label] ?? "var(--color-primary)";
+            return (
+              <div key={b.label} className="flex items-center gap-3" role="img" aria-label={`${b.label}: ${b.count} offers`}>
+                <span className="w-20 shrink-0 text-sm text-on-surface" title={`match ${b.min}–${b.max - 1}`}>
+                  {b.label}
+                </span>
+                <div className="h-5 flex-1 overflow-hidden rounded-full bg-surface-sunken">
+                  <div className="h-full rounded-full" style={{ width: `${(100 * b.count) / maxCount}%`, background: color }} />
+                </div>
+                <span className="w-16 shrink-0 text-right text-sm tabular-nums text-on-surface">
+                  {b.count}
+                  <span className="ml-1 text-xs text-on-surface-variant">{pct}%</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

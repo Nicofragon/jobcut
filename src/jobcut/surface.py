@@ -26,6 +26,39 @@ FEED_LIMIT = 300    # web feed per list: a safety ceiling only — the min-match
                     # the real filter, so the feed returns ~everything above the floor
                     # (the frontend reveals them progressively with "Show more").
 
+# match_score bands for the Discovery histogram, aligned to the shortlist thresholds
+# (min_score=60 = shortlist floor, backlog_min=75 = "top"). [lo, hi) except the last.
+SCORE_BANDS = [(0, 60, "Below bar"), (60, 75, "Shortlist"), (75, 101, "Top")]
+
+
+def score_distribution(conn) -> dict:
+    """How your scored offers spread across match-score bands (a pipeline-quality view).
+
+    Deduped by canonical_id (reposts collapsed, best score kept) so a role posted five
+    times counts once. Out-of-profile titles are already pre-discarded before scoring, so
+    this is the shape of your *in-profile* pipeline. Empty-safe: zeroed bands, no jobs.
+    """
+    s = db.read_scores(conn)
+    zero = {"total": 0, "median": 0,
+            "bands": [{"label": lbl, "min": lo, "max": hi, "count": 0} for lo, hi, lbl in SCORE_BANDS]}
+    if s.empty:
+        return zero
+    s = s.copy()
+    s["score"] = pd.to_numeric(s.match_score, errors="coerce")
+    s = s.dropna(subset=["score"])
+    if s.empty:
+        return zero
+    # collapse reposts: prefer canonical_id, fall back to job_id; keep the best score
+    cid = s.get("canonical_id")
+    s["key"] = (cid.astype(str).str.strip() if cid is not None else "").replace("", pd.NA)
+    s["key"] = s["key"].fillna(s["job_id"])
+    s = s.sort_values("score", ascending=False).drop_duplicates("key")
+
+    bands = [{"label": lbl, "min": lo, "max": hi,
+              "count": int(((s.score >= lo) & (s.score < hi)).sum())}
+             for lo, hi, lbl in SCORE_BANDS]
+    return {"total": int(len(s)), "median": int(s.score.median()), "bands": bands}
+
 
 def norm(x):
     return re.sub(r"\s+", " ", str(x).strip().lower())
