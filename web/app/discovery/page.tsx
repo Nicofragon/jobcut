@@ -8,7 +8,6 @@ import {
   type SkillDemand,
   type SkillGap,
   type ScoreDistribution,
-  type Competition,
   type Freshness,
 } from "@/lib/api";
 import { Icon } from "@/components/icons";
@@ -167,10 +166,7 @@ export default function DiscoveryPage() {
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <CompetitionCard comp={data.competition} />
-        <FreshnessCard fresh={data.freshness} />
-      </div>
+      <FreshnessCard fresh={data.freshness} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <Histogram dist={data.score_distribution} />
@@ -481,71 +477,6 @@ function GapPlan({
         </>
       ) : (
         <p className="mt-3 text-sm text-on-surface-variant">{emptyNote}</p>
-      )}
-    </section>
-  );
-}
-
-// crowdedness → color (fewer applicants is better): green < 20 ≤ amber < 100 ≤ red.
-function crowdColor(n: number): string {
-  return n < 20 ? "var(--color-score-high)" : n < 100 ? "var(--color-accent-amber)" : "var(--color-accent-red)";
-}
-
-// How crowded your market is — applicant-count distribution + per-segment median.
-function CompetitionCard({ comp }: { comp: Competition }) {
-  const maxCount = Math.max(1, ...comp.bands.map((b) => b.count));
-  const segs = Object.entries(comp.by_segment).filter(([, m]) => m > 0);
-  const maxSeg = Math.max(1, ...segs.map(([, m]) => m));
-  return (
-    <section className="rounded-card border border-border bg-surface p-5 shadow-card">
-      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold text-on-surface">Competition</h2>
-        <span className="text-xs text-on-surface-variant">median {comp.median} applicants · {comp.n} offers</span>
-      </div>
-      <p className="mb-4 text-sm text-on-surface-variant">How many people you&apos;re up against — fewer is better.</p>
-      {comp.n === 0 ? (
-        <p className="text-sm text-on-surface-variant">No applicant data yet.</p>
-      ) : (
-        <>
-          <div className="space-y-2.5">
-            {comp.bands.map((b) => {
-              const pct = Math.round((100 * b.count) / comp.n);
-              const label = b.max == null ? `${b.label} (${b.min}+)` : `${b.label} (${b.min}–${b.max - 1})`;
-              return (
-                <div key={b.label} className="flex items-center gap-3" role="img" aria-label={`${label}: ${b.count} offers`}>
-                  <span className="w-32 shrink-0 text-sm text-on-surface">{label}</span>
-                  <div className="h-5 flex-1 overflow-hidden rounded-full bg-surface-sunken">
-                    <div className="h-full rounded-full" style={{ width: `${(100 * b.count) / maxCount}%`, background: crowdColor(b.min) }} />
-                  </div>
-                  <span className="w-16 shrink-0 text-right text-sm tabular-nums text-on-surface">
-                    {b.count}
-                    <span className="ml-1 text-xs text-on-surface-variant">{pct}%</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {segs.length > 0 && (
-            <div className="mt-4 border-t border-border pt-3">
-              <p className="mb-2 text-xs font-medium text-on-surface-variant">Median applicants by segment</p>
-              <ul className="space-y-1.5">
-                {segs
-                  .sort((a, b) => a[1] - b[1])
-                  .map(([seg, m]) => (
-                    <li key={seg} className="flex items-center gap-2 text-xs">
-                      <span className="w-28 shrink-0 truncate text-on-surface-variant" title={humanizeSeg(seg)}>
-                        {humanizeSeg(seg)}
-                      </span>
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-sunken">
-                        <div className="h-full rounded-full" style={{ width: `${(100 * m) / maxSeg}%`, background: crowdColor(m) }} />
-                      </div>
-                      <span className="w-8 shrink-0 text-right tabular-nums text-on-surface">{m}</span>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
-        </>
       )}
     </section>
   );
