@@ -65,7 +65,11 @@ for scoring; `surface` is only for the final report in step 6.
    - If the list is empty, tell the user there's nothing to score and stop.
 
 2. **Read the profile**: read `profile.md` from the data dir. Note target roles,
-   seniority, must-haves, dealbreakers.
+   seniority, must-haves, dealbreakers. **The profile and the postings may be in different
+   languages** (e.g. a Spanish profile vs English job descriptions, or vice-versa) — that's
+   expected. Judge across languages: translate/normalize in your head and match on meaning,
+   so a skill on the CV matches its equivalent in the offer regardless of language. Never
+   penalize a real fit just because the two are written in different languages.
 
 3. **Score each job** against the profile. For every job produce:
    - `match_score`: integer 0–100.
@@ -75,9 +79,11 @@ for scoring; `surface` is only for the final report in step 6.
      by whether the profile has them. Each item is `{ "skill": "...", "note": "..." }`
      — `skill` is the requirement as the offer frames it (**free-form: not limited to any
      taxonomy**), `note` is a short why ("7y, core strength" / "asked, not on the CV").
-     Judge semantically against `profile.md`, not by keyword: an offer asking for
-     "advanced SQL" when the profile has years of SQL is *matched*; a tool the profile
-     never mentions is *missing*. Keep each list to the few skills that actually decide
+     Judge semantically against `profile.md`, not by keyword — and **across languages**: an
+     offer asking for "advanced SQL" when the profile has years of SQL is *matched*; an offer
+     asking for "aprendizaje automático" when the profile lists "machine learning" is
+     *matched*; a tool the profile never mentions is *missing*. Write each `skill` in the
+     offer's own language. Keep each list to the few skills that actually decide
      the fit (~3–6), not every buzzword. Omit both if the description is too thin to judge.
 
    Be honest and discriminating (this is the whole point of Claude scoring vs the
