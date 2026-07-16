@@ -408,6 +408,18 @@ def test_market(client):
     gap = next(g for g in body["gaps"] if g["skill"] == "Power BI")
     assert gap["status"] == "gap" and gap["close_via"] == "portfolio"
 
+    # score distribution: the two in-profile analyst roles are scored; bands sum to total.
+    dist = body["score_distribution"]
+    assert dist["total"] == sum(b["count"] for b in dist["bands"])
+    assert [b["label"] for b in dist["bands"]] == ["Below bar", "Shortlist", "Top"]
+    assert dist["total"] >= 1
+
+    # POST (Refresh) must return the SAME enriched shape as GET — never the old flat one.
+    refreshed = client.post("/api/market").json()
+    assert "coverage" in refreshed and "score_distribution" in refreshed
+    assert isinstance(refreshed["gaps"], list)
+    assert all(isinstance(g, dict) for g in refreshed["gaps"])
+
 
 def test_export(client):
     body = client.post("/api/export").json()

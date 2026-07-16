@@ -398,6 +398,9 @@ export type SkillGap = {
   n: number;
   cat: string;
 };
+// Distribution of your scored offers across match-score bands (pipeline quality).
+export type ScoreBand = { label: string; min: number; max: number; count: number };
+export type ScoreDistribution = { total: number; median: number; bands: ScoreBand[] };
 export type Market = {
   total: number;
   relevant: number;
@@ -408,6 +411,7 @@ export type Market = {
   top_demand: SkillDemand[];
   gaps: SkillGap[];
   salary_pct: number;
+  score_distribution: ScoreDistribution;
   empty?: boolean;
 };
 export const getMarket = () => api<Market>("/market");
