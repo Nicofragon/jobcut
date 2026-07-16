@@ -41,20 +41,20 @@ your real jobs, profile, and applications never leave your machine.
 
 ```mermaid
 flowchart LR
-    S["Saved searches<br/>searches/*.json"] --> AP["Apify<br/>harvestapi/linkedin-job-search"]
-    AP --> DB[("SQLite · jobcut.db<br/>upsert · never deletes")]
-    DB --> RT["Route<br/>geo gate"]
-    RT --> FT["Filter<br/>title regex · collapse reposts"]
-    FT --> SC{"Score 0–100<br/>vs profile.md"}
-    SC -->|rule_based · live| RB["Pure Python rubric<br/>no key · offline"]
-    SC -->|claude_skills · ingest-first| CL["Claude reads each job<br/>→ ingest-scores"]
-    RB --> SU["Surface<br/>ranked shortlist"]
+    S["Saved searches (searches/*.json)"] --> AP["Apify: harvestapi/linkedin-job-search"]
+    AP --> DB[("SQLite jobcut.db: upsert, never deletes")]
+    DB --> RT["Route (geo gate)"]
+    RT --> FT["Filter (title regex, collapse reposts)"]
+    FT --> SC{"Score 0-100 vs profile.md"}
+    SC -->|rule_based, live| RB["Pure Python rubric (no key, offline)"]
+    SC -->|claude_skills, ingest-first| CL["Claude scores, then ingest-scores"]
+    RB --> SU["Surface (ranked shortlist)"]
     CL --> SU
-    DB --> MK["Market<br/>skill demand vs gaps"]
-    SU --> API["FastAPI bridge · /api"]
-    API --> WEB["Next.js console<br/>(primary UI)"]
-    DB -. read + status .-> ST["Streamlit lite<br/>(no Node)"]
-    WEB --> TR[("applications table<br/>funnel · status · rounds")]
+    DB --> MK["Market (skill demand vs gaps)"]
+    SU --> API["FastAPI bridge (/api)"]
+    API --> WEB["Next.js console (primary UI)"]
+    DB -. read + status .-> ST["Streamlit lite (no Node)"]
+    WEB --> TR[("applications table: funnel, status, rounds")]
 ```
 
 - **SQLite is the canonical store** — a single local file (`jobcut.db`). The
