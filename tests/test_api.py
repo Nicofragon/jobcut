@@ -431,6 +431,12 @@ def test_put_profile_structured_autoderives_kit(client):
     assert tax["skills"]["SQL"]["status"] == "have"
     assert "Power BI" in tax["skills"]                        # existing kit skill preserved (merge)
 
+    # the kit endpoint reflects the same live taxonomy, flattened + counted by status.
+    kit = client.get("/api/profile/kit").json()
+    by_name = {s["name"]: s for s in kit["skills"]}
+    assert by_name["dbt"]["status"] == "gap" and by_name["dbt"]["category"]
+    assert kit["counts"]["gap"] >= 1 and kit["counts"]["have"] >= 1
+
 
 # --- market -----------------------------------------------------------------
 

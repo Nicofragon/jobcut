@@ -6,6 +6,7 @@ import {
   exportData,
   getConfig,
   getHealth,
+  getKit,
   getSchedule,
   getScoringBackends,
   getUpdateStatus,
@@ -17,6 +18,7 @@ import {
   type Health,
   type Schedule,
   type ScoringBackend,
+  type SkillsKit,
   type UpdateResult,
   type Validation,
 } from "@/lib/api";
@@ -30,12 +32,14 @@ export default function SettingsPage() {
   const [validation, setValidation] = useState<Validation | null>(null);
   const [backends, setBackends] = useState<ScoringBackend[]>([]);
   const [backend, setBackend] = useState("rule_based");
+  const [kit, setKit] = useState<SkillsKit | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
     getHealth().then(setHealth).catch(() => {});
     getConfig().then((c) => setBackend((c as { scoring?: { backend?: string } }).scoring?.backend ?? "rule_based"));
     getScoringBackends().then(setBackends).catch(() => {});
+    getKit().then(setKit).catch(() => {});
   }, []);
 
   function flash(m: string) {
@@ -60,6 +64,36 @@ export default function SettingsPage() {
           Edit profile →
         </Link>
       </div>
+
+      <Card title="Your profile & skills kit" subtitle="The kit is what every job is scored against and what Discovery reports on.">
+        {kit && kit.skills.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-4">
+            {(
+              [
+                ["have", "var(--color-score-high)"],
+                ["partial", "var(--color-accent-amber)"],
+                ["gap", "var(--color-accent-red)"],
+              ] as const
+            ).map(([s, color]) => (
+              <span key={s} className="inline-flex items-center gap-2 text-sm text-on-surface">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+                <b className="tabular-nums">{kit.counts[s]}</b>
+                <span className="text-on-surface-variant">{s}</span>
+              </span>
+            ))}
+            <Link href="/profile" className="ml-auto text-sm font-medium text-primary hover:underline">
+              View &amp; edit →
+            </Link>
+          </div>
+        ) : (
+          <p className="text-sm text-on-surface-variant">
+            No skills kit yet.{" "}
+            <Link href="/profile" className="font-medium text-primary hover:underline">
+              Build your profile →
+            </Link>
+          </p>
+        )}
+      </Card>
 
       <Card title="Appearance" subtitle="Choose how the console looks. Your choice is remembered on this computer.">
         <ThemeSegmented />

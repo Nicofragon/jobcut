@@ -6,13 +6,16 @@ import {
   deriveProfile,
   getConfig,
   getDerived,
+  getKit,
   getProfile,
   getProfileStructured,
   putConfig,
   putProfile,
   putProfileStructured,
   type Derived,
+  type KitSkill,
   type ProfileFields,
+  type SkillsKit,
 } from "@/lib/api";
 import TagInput from "@/components/TagInput";
 import WorkTypeToggle from "@/components/WorkTypeToggle";
@@ -33,13 +36,17 @@ export default function ProfilePage() {
   const [fields, setFields] = useState<ProfileFields>(EMPTY);
   const [savedProfile, setSavedProfile] = useState(false);
   const [derived, setDerived] = useState<Derived | null>(null);
+  const [kit, setKit] = useState<SkillsKit | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [weights, setWeights] = useState<Record<string, number>>({});
   const [savedWeights, setSavedWeights] = useState(false);
 
+  const refreshKit = () => getKit().then(setKit).catch(() => {});
+
   useEffect(() => {
     getProfileStructured().then(setFields).catch(() => {});
     getDerived().then(setDerived).catch(() => {});
+    refreshKit();
     getConfig().then((c) =>
       setWeights((c as { scoring?: { weights?: Record<string, number> } }).scoring?.weights ?? {}),
     );
@@ -52,11 +59,13 @@ export default function ProfilePage() {
     setSavedProfile(true);
     setTimeout(() => setSavedProfile(false), 2000);
     getDerived().then(setDerived).catch(() => {});
+    refreshKit(); // save auto-derives the kit → refresh the visual
   }
   async function generate() {
     const r = await deriveProfile(false);
     setReport(`Wrote ${r.written.length}, kept ${r.skipped.length} existing.`);
     getDerived().then(setDerived).catch(() => {});
+    refreshKit();
   }
   async function saveWeights() {
     await putConfig({ scoring: { weights } });
@@ -112,6 +121,8 @@ export default function ProfilePage() {
           </button>
         </div>
       </Card>
+
+      <SkillsKitCard kit={kit} />
 
       <Card title="Searches & rubric">
         <p className="mb-3 text-sm text-on-surface-variant">
@@ -202,6 +213,80 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
       <h2 className="text-lg font-semibold text-on-surface">{title}</h2>
       {subtitle && <p className="mb-3 mt-0.5 text-sm text-on-surface-variant">{subtitle}</p>}
       <div className={subtitle ? "" : "mt-4"}>{children}</div>
+    </section>
+  );
+}
+
+// Skill status → colour (mirrors Discovery: have green / partial amber / gap red).
+const KIT_STATUS: Record<string, { color: string; label: string }> = {
+  have: { color: "var(--color-score-high)", label: "have" },
+  partial: { color: "var(--color-accent-amber)", label: "partial" },
+  gap: { color: "var(--color-accent-red)", label: "gap" },
+};
+const CAT_LABEL: Record<string, string> = {
+  core: "Core", viz: "Visualization", dataeng: "Data engineering",
+  warehouse: "Warehouse", method: "Methods", ml: "ML / AI", other: "Other",
+};
+const CAT_ORDER = ["core", "viz", "dataeng", "warehouse", "method", "ml", "other"];
+
+// The live kit that drives scoring + Discovery — grouped by category, coloured by status.
+function SkillsKitCard({ kit }: { kit: SkillsKit | null }) {
+  if (!kit || kit.skills.length === 0) {
+    return (
+      <section className="rounded-card border border-border bg-surface p-5 shadow-card">
+        <h2 className="text-lg font-semibold text-on-surface">Your skills kit</h2>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          {kit ? "No skills yet — add them above and save to build your kit." : "Loading…"}
+        </p>
+      </section>
+    );
+  }
+  const groups: Record<string, KitSkill[]> = {};
+  for (const s of kit.skills) (groups[s.category || "other"] ??= []).push(s);
+  const cats = Object.keys(groups).sort(
+    (a, b) => (CAT_ORDER.indexOf(a) + 1 || 99) - (CAT_ORDER.indexOf(b) + 1 || 99),
+  );
+  return (
+    <section className="rounded-card border border-border bg-surface p-5 shadow-card">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-on-surface">Your skills kit</h2>
+        <div className="flex gap-3 text-xs text-on-surface-variant">
+          {(["have", "partial", "gap"] as const).map((s) => (
+            <span key={s} className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: KIT_STATUS[s].color }} />
+              <span className="tabular-nums">{kit.counts[s]}</span> {s}
+            </span>
+          ))}
+        </div>
+      </div>
+      <p className="mb-4 text-sm text-on-surface-variant">
+        The skills that drive your scoring and Discovery — coloured by whether you have them.
+      </p>
+      <div className="space-y-4">
+        {cats.map((cat) => (
+          <div key={cat}>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-on-surface-faint">
+              {CAT_LABEL[cat] ?? cat}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {groups[cat].map((s) => {
+                const st = KIT_STATUS[s.status] ?? { color: "var(--color-on-surface-faint)", label: s.status };
+                return (
+                  <span
+                    key={s.name}
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium"
+                    style={{ color: st.color, background: `color-mix(in srgb, ${st.color} 12%, transparent)` }}
+                    title={s.close_via ? `${st.label} · close via ${s.close_via}` : st.label}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: st.color }} />
+                    {s.name}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
