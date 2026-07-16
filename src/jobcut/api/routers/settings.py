@@ -29,6 +29,16 @@ def _profile_path():
     return paths.data_dir() / "profile.md"
 
 
+def _autoderive() -> None:
+    """Keep the kit (config + taxonomy) in sync with the profile after an edit — MERGE mode,
+    so manual tweaks survive. Searches stay opt-in (the explicit 'Regenerate' action). A save
+    must never fail because derivation hiccuped, so this is best-effort."""
+    try:
+        profile_mod.apply(force=False, targets=["config", "taxonomy"])
+    except Exception:
+        pass
+
+
 @router.get("/profile")
 def get_profile():
     p = _profile_path()
@@ -40,6 +50,7 @@ def put_profile(body: ProfileIn):
     p = _profile_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(body.content)
+    _autoderive()
     return {"content": body.content}
 
 
@@ -58,6 +69,7 @@ def put_profile_structured(fields: profile_mod.ProfileFields):
     md = profile_mod.from_structured(fields, base_md=base)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(md)
+    _autoderive()
     return profile_mod.to_structured(md)
 
 

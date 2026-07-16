@@ -1,5 +1,6 @@
 """Tests for profile.py — parsing + role-agnostic derivation of the targeting."""
 
+import json
 import re
 
 import pytest
@@ -93,6 +94,18 @@ def test_derive_taxonomy_and_signals():
     assert cfg["scoring"]["dealbreakers"]            # best-effort from dealbreakers
 
 
+def test_gap_and_partial_skills_derive_to_taxonomy():
+    md = NURSE_MD + "\n## Skill gaps\n- Ventilator management\n"
+    pd = profile.parse(md)
+    assert pd.gap_skills == ["Ventilator management"]
+    tax = profile.derive_taxonomy(pd)
+    gap = tax["skills"]["Ventilator management"]
+    assert gap["status"] == "gap" and gap["close_via"]             # gap carries a close_via
+    # nice-to-have now becomes a `partial` taxonomy skill (not just a scoring signal)
+    assert tax["skills"]["Pediatric care"]["status"] == "partial"
+    assert tax["skills"]["Patient care"]["status"] == "have"
+
+
 def test_derive_searches_respects_remote_mode():
     s = profile.derive_searches(profile.parse(NURSE_MD))
     assert "remote" not in s                         # on-site only -> no remote search
@@ -102,16 +115,29 @@ def test_derive_searches_respects_remote_mode():
     assert only["locations"] == ["Boston, USA"] and "geoIds" not in only  # plain name, no geoId to hunt
 
 
-def test_apply_is_non_destructive(tmp_path):
+def test_apply_merges_and_preserves_manual_edits(tmp_path):
     (tmp_path / "profile.md").write_text(NURSE_MD)
     r1 = profile.apply(force=False)
     assert r1["written"] and not r1["skipped"]
-    # second run skips everything (does not clobber edits)
+
+    # hand-tune the derived kit: add a pattern to a skill + a skill the profile never mentions
+    tax_path = config.taxonomy_file()
+    tax = json.loads(tax_path.read_text())
+    tax["skills"]["Patient care"]["patterns"].append("bedside")
+    tax["skills"]["Manual-only"] = {"cat": "core", "status": "gap", "close_via": "course",
+                                    "patterns": ["manualonly"]}
+    tax_path.write_text(json.dumps(tax))
+
+    # a second apply MERGES (re-derives config/taxonomy, skips tuned searches) and keeps edits
     r2 = profile.apply(force=False)
-    assert r2["written"] == [] and r2["skipped"]
-    # force overwrites
-    r3 = profile.apply(force=True)
-    assert r3["written"] and r3["skipped"] == []
+    assert any("searches" in p for p in r2["skipped"])              # tuned searches untouched
+    merged = json.loads(tax_path.read_text())
+    assert "bedside" in merged["skills"]["Patient care"]["patterns"]  # manual pattern survived
+    assert "Manual-only" in merged["skills"]                          # manual skill survived
+
+    # force regenerates straight from the profile (the manual-only skill is dropped)
+    profile.apply(force=True)
+    assert "Manual-only" not in json.loads(tax_path.read_text())["skills"]
 
 
 # --- role-agnostic acceptance (KR2) -----------------------------------------

@@ -31,10 +31,18 @@ The scorer rewards jobs whose description mentions these.
 
 ## Nice-to-have / learning
 
-Skills you have some exposure to but wouldn't claim as core.
+Skills you have some exposure to but wouldn't claim as core (they count as *partial* in
+your kit and nudge matching scores up).
 
 - dbt
 - BigQuery
+- (add yours)
+
+## Skill gaps
+
+Skills the market asks for that you don't have yet or are learning. These drive Discovery's
+gap analysis (they show up as *gap* in your kit) — leave empty if you're not sure.
+
 - (add yours)
 
 ## Location & work mode
