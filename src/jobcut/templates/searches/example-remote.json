@@ -1,9 +1,7 @@
 {
   "jobTitles": [
-    "Data Analyst",
-    "Senior Data Analyst",
-    "Product Analyst",
-    "Analytics Engineer"
+    "REPLACE_ME — a target job title",
+    "REPLACE_ME — another remote title you'd take"
   ],
   "geoIds": ["91000000"],
   "workplaceType": ["remote"],
@@ -11,5 +9,5 @@
   "maxItems": 65,
   "postedLimit": "24h",
   "sortBy": "relevance",
-  "_note": "Remote search across a wide region. geoId 91000000 = European Economic Area (EEA). Use a country or worldwide geoId to widen/narrow. Whether a remote job counts as hireable for you is decided by route.py (your geography rules), not here."
+  "_note": "Remote search across a wide region. The jobTitles are PLACEHOLDERS — replace them with your own (not tied to any field); building your profile can generate them from your Target roles. geoId 91000000 = European Economic Area (EEA); use a country or worldwide geoId to widen/narrow. Whether a remote job counts as hireable for you is decided by route.py (your geography rules), not here."
 }

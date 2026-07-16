@@ -255,7 +255,7 @@ function SearchFields({
     <div className="space-y-4">
       <ImportFromUrl form={form} patch={patch} onUsedGeoid={() => setAdvanced(true)} />
       <Labeled label="Job titles">
-        <TagInput values={form.titles} onChange={(v) => set("titles", v)} placeholder="e.g. Data Analyst — press Enter…" />
+        <TagInput values={form.titles} onChange={(v) => set("titles", v)} placeholder="e.g. your target job title — press Enter…" />
       </Labeled>
       <Labeled label="Locations">
         <TagInput values={form.locations} onChange={(v) => set("locations", v)} placeholder="e.g. European Economic Area — press Enter…" />

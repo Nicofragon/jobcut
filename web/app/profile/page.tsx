@@ -105,13 +105,13 @@ export default function ProfilePage() {
             />
           </Field>
           <Field label="Must-have skills" hint="Things you bring — they boost matching jobs.">
-            <TagInput values={fields.skills} onChange={(v) => set("skills", v)} placeholder="e.g. SQL, Python…" />
+            <TagInput values={fields.skills} onChange={(v) => set("skills", v)} placeholder="Skills you can do today…" />
           </Field>
           <Field label="Nice-to-haves" hint="Some exposure — count as partial in your kit and nudge scores up.">
-            <TagInput values={fields.must_haves} onChange={(v) => set("must_haves", v)} placeholder="e.g. dbt, BigQuery…" />
+            <TagInput values={fields.must_haves} onChange={(v) => set("must_haves", v)} placeholder="Skills you have some exposure to…" />
           </Field>
           <Field label="Skill gaps" hint="Skills you're missing or learning — these drive Discovery's gap analysis.">
-            <TagInput values={fields.gaps} onChange={(v) => set("gaps", v)} placeholder="e.g. Spark, Airflow…" />
+            <TagInput values={fields.gaps} onChange={(v) => set("gaps", v)} placeholder="Skills you're missing or learning…" />
           </Field>
           <Field label="Dealbreakers" hint="Hard no's — jobs requiring these get penalized.">
             <TagInput values={fields.dealbreakers} onChange={(v) => set("dealbreakers", v)} placeholder="e.g. security clearance…" />
@@ -223,11 +223,17 @@ const KIT_STATUS: Record<string, { color: string; label: string }> = {
   partial: { color: "var(--color-accent-amber)", label: "partial" },
   gap: { color: "var(--color-accent-red)", label: "gap" },
 };
-const CAT_LABEL: Record<string, string> = {
-  core: "Core", viz: "Visualization", dataeng: "Data engineering",
-  warehouse: "Warehouse", method: "Methods", ml: "ML / AI", other: "Other",
-};
-const CAT_ORDER = ["core", "viz", "dataeng", "warehouse", "method", "ml", "other"];
+// Categories are free-form (derived from the user's own field — designer, PM, nurse,
+// analyst…), so we don't hardcode a data-role vocabulary. Pretty-print any key by
+// title-casing it, and order "core" first / "other" last / the rest alphabetically.
+function humanizeCat(key: string): string {
+  return key.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function catSortKey(key: string): [number, string] {
+  if (key === "core") return [0, ""];
+  if (key === "other") return [2, ""];
+  return [1, key.toLowerCase()];
+}
 
 // The live kit that drives scoring + Discovery — grouped by category, coloured by status.
 function SkillsKitCard({ kit }: { kit: SkillsKit | null }) {
@@ -243,9 +249,11 @@ function SkillsKitCard({ kit }: { kit: SkillsKit | null }) {
   }
   const groups: Record<string, KitSkill[]> = {};
   for (const s of kit.skills) (groups[s.category || "other"] ??= []).push(s);
-  const cats = Object.keys(groups).sort(
-    (a, b) => (CAT_ORDER.indexOf(a) + 1 || 99) - (CAT_ORDER.indexOf(b) + 1 || 99),
-  );
+  const cats = Object.keys(groups).sort((a, b) => {
+    const [ra, sa] = catSortKey(a);
+    const [rb, sb] = catSortKey(b);
+    return ra - rb || sa.localeCompare(sb);
+  });
   return (
     <section className="rounded-card border border-border bg-surface p-5 shadow-card">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -266,7 +274,7 @@ function SkillsKitCard({ kit }: { kit: SkillsKit | null }) {
         {cats.map((cat) => (
           <div key={cat}>
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-on-surface-faint">
-              {CAT_LABEL[cat] ?? cat}
+              {humanizeCat(cat)}
             </p>
             <div className="flex flex-wrap gap-2">
               {groups[cat].map((s) => {

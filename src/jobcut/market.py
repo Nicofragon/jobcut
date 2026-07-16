@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """market.py — Stage 8: skill-demand vs your profile over the whole database.
 
-Reads the jobs table (db.py), filters the relevant market (data/analytics
-segments), counts skill demand over title+description, cross-references your
-taxonomy status (have/partial/gap) and writes:
+Reads the jobs table (db.py), filters the relevant market (the role_segments from
+your profile-derived taxonomy — whatever field you're in), counts skill demand over
+title+description, cross-references your taxonomy status (have/partial/gap) and writes:
   - out/market-gaps.md          (report)
   - out/market-dashboard.html   (interactive chart)
   - market_history.xlsx         (per-skill, per-date snapshot — local data)
@@ -228,7 +228,7 @@ def main(conn=None):
     md = [
         f"---\ntype: note\nstatus: active\nupdated: {today}\n---\n",
         "# 📊 Market Gaps — demand vs your profile\n",
-        f"> Updated {today} · source: mother file ({total} offers, {R} in the relevant data/analytics market). "
+        f"> Updated {today} · source: mother file ({total} offers, {R} in your relevant market). "
         f"Sample {'small — signals, not trends' if R < 100 else 'sufficient'}.\n",
         "## Segment mix\n",
         "| segment | offers |", "|---|---|",
@@ -262,7 +262,7 @@ def main(conn=None):
 h1{{font-size:22px}}.meta{{color:#94a3b8;font-size:13px}}.card{{background:#1e293b;border-radius:12px;padding:16px;margin:12px 0}}
 .legend span{{margin-right:14px;font-size:12px}}.dot{{display:inline-block;width:10px;height:10px;border-radius:5px;margin-right:4px}}</style></head><body>
 <h1>📊 Market Gaps — demand vs your profile</h1>
-<p class="meta">{today} · {total} offers · {R} relevant (data/analytics) · source: jobs_database.xlsx</p>
+<p class="meta">{today} · {total} offers · {R} relevant (your target segments) · source: jobs_database.xlsx</p>
 <div class="legend"><span><i class="dot" style="background:#22c55e"></i>Have</span><span><i class="dot" style="background:#eab308"></i>Partial</span><span><i class="dot" style="background:#ef4444"></i>Gap</span></div>
 <div class="card"><h3>% of relevant offers asking for each skill</h3><canvas id="sk" height="150"></canvas></div>
 <div class="card"><h3>Offers by segment</h3><canvas id="seg" height="150"></canvas></div>

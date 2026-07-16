@@ -24,14 +24,12 @@ DEFAULTS = {
         "region": r"(european union|european economic area|\beea\b|\bemea\b|^europe$|^eu$)",
     },
     # Filter: which job titles are worth scoring (everything else is dropped cheaply).
+    # ROLE-AGNOSTIC: empty by default = no title pre-filter and no field bias. The real
+    # value is DERIVED from your profile's target roles (profile.derive_include_titles,
+    # written on profile save / onboarding). Until you set a profile, no title is treated
+    # as "in profile", so scores stay capped — build a profile and this fills itself in.
     "filter": {
-        "include_titles": (
-            r"(data analyst|data scien|analytics|business intelligence|\bbi\b|product analyst|"
-            r"business analyst|data engineer|machine learning|\bml\b|\bai\b|artificial intelligence|"
-            r"insight|reporting analyst|decision scien|quantitative|growth analyst|marketing analyst|"
-            r"crm analyst|data ?& ?ai|data and ai|datos|anal[ií]st|cient[ií]fic|ingenier[oa] de datos|"
-            r"inteligencia artificial|aprendizaje autom)"
-        ),
+        "include_titles": "",
     },
     # Scoring: backend selection + rule_based rubric weights.
     "scoring": {

@@ -30,7 +30,8 @@ in any language. jobcut matches them literally, so keep them as the user actuall
 ## Steps
 
 1. **Gather the inputs.** Either interview the user or read a CV they paste:
-   - **Target roles** — the job titles they want (e.g. "Senior Data Analyst").
+   - **Target roles** — the job titles they want (e.g. "Senior Product Designer",
+     "Product Manager", "Pediatric Nurse", "Data Analyst" — whatever field they're in).
    - **Seniority** — one line ("~8 years, senior IC").
    - **Location & remote** — where they're based; remote appetite (yes / hybrid only /
      on-site only).
@@ -39,25 +40,32 @@ in any language. jobcut matches them literally, so keep them as the user actuall
      - `partial` — some exposure, wouldn't claim as core.
      - `gap` — skills their target roles want that they don't have yet / are learning.
    - **Dealbreakers** — hard constraints they do NOT meet (a required language, clearance…).
-   - Optionally tag each skill with a **category** (core / viz / dataeng / warehouse /
-     method / ml) and **aliases** (other names/tools that mean the same skill).
+   - Optionally tag each skill with a **category** and **aliases** (other names/tools that
+     mean the same skill). **Categories are free-form — use whatever groups the skills
+     naturally in the user's OWN field**, don't force a fixed set: a designer might use
+     `research / interaction / visual / prototyping`; a product manager `discovery /
+     delivery / analytics / leadership`; a nurse `clinical / patient-care / documentation /
+     compliance`; a data analyst `core / viz / modeling`. Let the categories come from the
+     user, and default anything uncertain to `core`.
    - If reading a CV, draft the split yourself, then **show the user the have/partial/gap
      lists and let them correct** before writing — don't guess silently.
 
-2. **Build the payload** as JSON (skills can be bare names — they default to have/core):
+2. **Build the payload** as JSON (skills can be bare names — they default to have/core).
+   This example is a **product designer** on purpose, to show the categories/skills come
+   from the user's field, not a fixed data taxonomy — for a nurse or analyst they'd differ:
    ```json
    {
-     "target_roles": ["Senior Data Analyst", "Product Analyst"],
+     "target_roles": ["Senior Product Designer", "UX Designer"],
      "seniority": "~8 years, senior IC",
      "locations": ["Madrid, Spain"],
      "work_types": ["remote", "hybrid"],
-     "dealbreakers": ["security clearance"],
+     "dealbreakers": ["on-site 5 days a week"],
      "skills": [
-       { "name": "SQL",     "status": "have",    "category": "core",    "aliases": ["postgres"] },
-       { "name": "Python",  "status": "have",    "category": "core",    "aliases": ["pandas"] },
-       { "name": "Tableau", "status": "partial", "category": "viz" },
-       { "name": "dbt",     "status": "gap",     "category": "dataeng" },
-       { "name": "Airflow", "status": "gap",     "category": "dataeng" }
+       { "name": "Figma",             "status": "have",    "category": "visual",       "aliases": ["sketch"] },
+       { "name": "Design systems",    "status": "have",    "category": "systems" },
+       { "name": "User research",     "status": "partial", "category": "research",      "aliases": ["usability testing"] },
+       { "name": "Prototyping",       "status": "have",    "category": "interaction" },
+       { "name": "Front-end (HTML/CSS)","status": "gap",   "category": "engineering" }
      ]
    }
    ```
