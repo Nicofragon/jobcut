@@ -36,7 +36,7 @@ def client(tmp_path, monkeypatch):
     ]:
         r = {c: "" for c in db.JOB_COLS}
         r.update(job_id=jid, title=title, company_name="Acme", company_size="200",
-                 location=loc, workplace_type=wp, applicants="10",
+                 location=loc, workplace_type=wp, applicants="10", posted_date="2026-06-10",
                  linkedin_url=f"https://www.linkedin.com/jobs/view/{jid}",
                  description="SQL, Python and Power BI for analytics.")
         rows[jid] = r
@@ -414,9 +414,21 @@ def test_market(client):
     assert [b["label"] for b in dist["bands"]] == ["Below bar", "Shortlist", "Top"]
     assert dist["total"] >= 1
 
+    # competition: the two in-market offers each have applicants=10 → all in the Low band.
+    comp = body["competition"]
+    assert comp["n"] == 2 and comp["median"] == 10
+    low = next(b for b in comp["bands"] if b["label"] == "Low")
+    assert low["count"] == 2
+    assert set(comp["by_segment"]) == {"data-analyst", "ds-ai"}
+
+    # freshness: both in-market rows carry a date, so there's ≥1 weekly bucket and an age.
+    fresh = body["freshness"]
+    assert fresh["n"] == 2 and fresh["weekly"] and fresh["median_age_days"] >= 0
+
     # POST (Refresh) must return the SAME enriched shape as GET — never the old flat one.
     refreshed = client.post("/api/market").json()
     assert "coverage" in refreshed and "score_distribution" in refreshed
+    assert "competition" in refreshed and "freshness" in refreshed
     assert isinstance(refreshed["gaps"], list)
     assert all(isinstance(g, dict) for g in refreshed["gaps"])
 
