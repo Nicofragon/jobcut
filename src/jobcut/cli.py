@@ -99,6 +99,22 @@ def cmd_ingest_scores(args) -> int:
     return 0
 
 
+def cmd_ingest_profile(args) -> int:
+    """Build profile.md + the skills kit from a structured JSON (an interview or CV extraction)."""
+    from . import ingest
+    try:
+        s = ingest.ingest_profile(args.json)
+    except FileNotFoundError:
+        print(f"ingest-profile: file not found: {args.json}")
+        return 1
+    except ValueError as exc:  # bad JSON or wrong shape
+        print(f"ingest-profile: invalid profile file ({exc})")
+        return 1
+    print(f"ingest-profile · profile.md written · {s['skills']} skills "
+          f"({s['have']} have / {s['partial']} partial / {s['gap']} gap); kit re-derived")
+    return 0
+
+
 def cmd_ingest_salary(args) -> int:
     """Upsert salary estimates from a JSON file (e.g. produced by a Claude/Cowork salary skill)."""
     from . import ingest
@@ -903,6 +919,12 @@ def build_parser() -> argparse.ArgumentParser:
     pis.add_argument("--backend", default="claude_skills",
                      help="label the source backend for these scores (default: claude_skills)")
     pis.set_defaults(func=cmd_ingest_scores)
+
+    pip = sub.add_parser("ingest-profile",
+                         help="build profile.md + the skills kit from a structured JSON (interview/CV)")
+    pip.add_argument("json", help='path to JSON: {target_roles, seniority?, locations, work_types, '
+                                  'dealbreakers, skills:[{name,status,category?,aliases?}]}')
+    pip.set_defaults(func=cmd_ingest_profile)
 
     pie = sub.add_parser("ingest-events",
                          help="apply application write-ops from a JSON file (notes, rounds, status, fields)")

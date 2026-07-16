@@ -88,6 +88,7 @@ Report which specific thing failed and which is fine — "10/11 skills loaded,
 
 | The user wants to… | Hand off to |
 |---|---|
+| Set up / update their profile or skills (interview or from a CV) | `jobcut-profile` |
 | Pull new jobs and score them (the daily run) | `jobcut-daily` |
 | Score / re-score jobs already in the DB with Claude | `jobcut-score` |
 | Know what to apply to, see the pipeline/weekly stats (read-only) | `jobcut-review` |

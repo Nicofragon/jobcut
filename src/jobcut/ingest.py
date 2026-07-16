@@ -39,7 +39,7 @@ import json
 import re
 from pathlib import Path
 
-from . import db
+from . import db, paths, profile
 
 _REASON_MAX = 240
 _SKILL_MAX = 80      # per skill name
@@ -143,6 +143,86 @@ def ingest_scores(path, conn=None, backend: str = "claude_skills") -> dict:
     finally:
         if own:
             conn.close()
+
+
+# --- profile (interview / CV → profile.md + kit) ----------------------------
+
+def _skill_from_item(it) -> profile.Skill | None:
+    """One skill from a profile payload: a bare name, or {name/skill, status, category, aliases}."""
+    if isinstance(it, str):
+        name, status, cat, aliases = it.strip(), "have", "core", []
+    elif isinstance(it, dict):
+        name = str(it.get("name") or it.get("skill") or "").strip()
+        status = str(it.get("status") or "have").strip().lower()
+        cat = str(it.get("category") or it.get("cat") or "core").strip().lower()
+        aliases = [str(a).strip() for a in (it.get("aliases") or []) if str(a).strip()]
+    else:
+        return None
+    if not name:
+        return None
+    if status not in ("have", "partial", "gap"):
+        status = "have"
+    return profile.Skill(name=name[:80], status=status, category=(cat or "core")[:40], aliases=aliases[:12])
+
+
+def _profile_from_payload(data: dict) -> profile.ProfileData:
+    """Build a rich ProfileData (status-aware skills) from an interview/CV JSON payload."""
+    def _list(key):
+        v = data.get(key)
+        return [str(x).strip() for x in v if str(x).strip()] if isinstance(v, list) else []
+
+    seen, skills = set(), []
+    for it in (data.get("skills") or []):
+        s = _skill_from_item(it)
+        key = profile._skill_name(s.name).lower() if s else ""
+        if key and key not in seen:
+            seen.add(key)
+            skills.append(s)
+    return profile.ProfileData(
+        target_titles=_list("target_roles"),
+        skills=skills,
+        based_in=", ".join(_list("locations")),
+        remote_mode=", ".join(_list("work_types")),
+        dealbreakers=_list("dealbreakers"),
+    )
+
+
+def ingest_profile(path, *, targets: list[str] | None = None) -> dict:
+    """Write profile.md from a structured payload (interview / CV) and re-derive the kit.
+
+    Payload (mirrors ProfileFields + status-aware skills)::
+
+        {"target_roles": [...], "seniority": "...", "locations": [...], "work_types": [...],
+         "dealbreakers": [...],
+         "skills": [{"name": "SQL", "status": "have", "category": "core", "aliases": ["postgres"]}]}
+
+    profile.md is the human record (managed sections regenerated, custom ones preserved);
+    the kit (config + taxonomy) is derived from the RICH ProfileData so category/aliases reach
+    the taxonomy, then MERGED so manual edits survive. Skill names may be in any language.
+    """
+    data = json.loads(Path(path).read_text())
+    if not isinstance(data, dict):
+        raise ValueError('profile payload must be a JSON object')
+    pd = _profile_from_payload(data)
+
+    pp = paths.data_dir() / "profile.md"
+    base = pp.read_text() if pp.exists() else ""
+    seniority = str(data.get("seniority") or "").strip() or None
+    fields = profile.ProfileFields(
+        target_roles=pd.target_titles,
+        locations=[x.strip() for x in pd.based_in.split(",") if x.strip()],
+        work_types=[x.strip() for x in pd.remote_mode.split(",") if x.strip()],
+        seniority=seniority,
+        must_haves=pd.nice_skills, skills=pd.core_skills, gaps=pd.gap_skills,
+        dealbreakers=pd.dealbreakers,
+    )
+    pp.parent.mkdir(parents=True, exist_ok=True)
+    pp.write_text(profile.from_structured(fields, base_md=base))
+
+    report = profile.apply(pd, force=False, targets=targets or ["searches", "config", "taxonomy"])
+    return {"skills": len(pd.skills), "have": len(pd.core_skills),
+            "partial": len(pd.nice_skills), "gap": len(pd.gap_skills),
+            "written": report["written"], "skipped": report["skipped"]}
 
 
 # --- salary estimates (B-15) ------------------------------------------------

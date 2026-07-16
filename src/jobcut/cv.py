@@ -47,18 +47,22 @@ def extract_text(filename: str, data: bytes) -> str:
 
 
 _HEADINGS = ["Target roles", "Seniority", "Core skills", "Nice-to-have / learning",
-             "Location & work mode", "Dealbreakers"]
+             "Skill gaps", "Location & work mode", "Dealbreakers"]
 
 _AI_SYSTEM = (
     "You convert a CV into a jobcut profile.md. Output ONLY markdown with EXACTLY these "
     "level-2 headings, in this order: "
     "'## Target roles' (bulleted job titles the person should target), "
     "'## Seniority' (one line), "
-    "'## Core skills' (bulleted skills they can do today), "
-    "'## Nice-to-have / learning' (bulleted), "
+    "'## Core skills' (bulleted skills they can clearly do today — their strengths), "
+    "'## Nice-to-have / learning' (bulleted skills they have SOME exposure to but wouldn't "
+    "claim as core), "
+    "'## Skill gaps' (bulleted skills their target roles commonly require that the CV does "
+    "NOT evidence — leave empty if none stand out), "
     "'## Location & work mode' (lines 'Based in: ...' and 'Remote: yes/hybrid only/on-site only'), "
     "'## Dealbreakers' (bulleted hard constraints). "
-    "Infer reasonably from the CV; leave a section's bullets empty if unknown. No preamble."
+    "Split skills honestly across Core / Nice-to-have / Skill gaps by how strongly the CV "
+    "evidences each. Infer reasonably; leave a section's bullets empty if unknown. No preamble."
 )
 
 
