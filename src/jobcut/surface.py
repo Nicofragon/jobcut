@@ -60,6 +60,51 @@ def score_distribution(conn) -> dict:
     return {"total": int(len(s)), "median": int(s.score.median()), "bands": bands}
 
 
+def shortlist_skill_gaps(conn, *, min_score: int = 60, limit: int = 8) -> dict:
+    """Gap skills the offers you'd actually apply to (score ≥ min_score) ask for most.
+
+    Unlike the market-wide gaps (over every relevant offer), this is scoped to YOUR
+    shortlist — the skills holding back the roles you're a real match for. Regex-derived
+    per offer, deduped by canonical_id. Empty-safe.
+    """
+    from . import config, market
+    tax = config.load_taxonomy(required=False)
+    empty = {"n": 0, "gaps": []}
+    if not tax or not tax.get("skills"):
+        return empty
+    s = db.read_scores(conn)
+    if s.empty:
+        return empty
+    s = s.copy()
+    s["score"] = pd.to_numeric(s.match_score, errors="coerce")
+    s = s[s.score >= min_score]
+    if s.empty:
+        return empty
+    jobs = db.read_jobs(conn, columns=["job_id", "title", "description"])
+    if jobs.empty:
+        return empty
+    df = jobs.merge(s[["job_id", "score", "canonical_id"]], on="job_id", how="inner")
+    if df.empty:
+        return empty
+    df["key"] = df.canonical_id.astype(str).str.strip().replace("", pd.NA).fillna(df.job_id)
+    df = df.sort_values("score", ascending=False).drop_duplicates("key")
+
+    match = market.skill_matcher(tax)
+    counts: dict[str, int] = {}
+    for text in (df.title.astype(str) + " " + df.description.astype(str)):
+        for m in match(text)["missing"]:
+            if m["close_via"] == "skip":            # consistency with market-wide gaps
+                continue
+            counts[m["skill"]] = counts.get(m["skill"], 0) + 1
+    n = int(len(df))
+    skills = tax["skills"]
+    gaps = sorted(counts.items(), key=lambda kv: -kv[1])[:limit]
+    out = [{"skill": k, "n": v, "pct": round(100 * v / n) if n else 0,
+            "close_via": skills.get(k, {}).get("close_via", ""), "cat": skills.get(k, {}).get("cat", "")}
+           for k, v in gaps]
+    return {"n": n, "gaps": out}
+
+
 def norm(x):
     return re.sub(r"\s+", " ", str(x).strip().lower())
 

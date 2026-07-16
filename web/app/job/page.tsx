@@ -690,6 +690,34 @@ function JobDetailView() {
             </div>
           )}
 
+          {/* per-offer skills — which of your taxonomy skills this role asks for */}
+          {!appOnly && data.skills_match && (data.skills_match.matched.length > 0 || data.skills_match.missing.length > 0) && (
+            <div className="rounded-card border border-border bg-surface p-6 shadow-card">
+              <h3 className="mb-1 text-lg font-semibold text-on-surface">Skills for this role</h3>
+              <p className="mb-4 text-sm text-on-surface-variant">From your profile, matched against this offer.</p>
+              {data.skills_match.matched.length > 0 && (
+                <div className="mb-4">
+                  <p className="mb-2 text-xs font-medium text-on-surface-variant">You have</p>
+                  <div className="flex flex-wrap gap-2">
+                    {data.skills_match.matched.map((s) => (
+                      <SkillChip key={s.skill} skill={s.skill} status={s.status} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.skills_match.missing.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-on-surface-variant">Gaps it asks for</p>
+                  <div className="flex flex-wrap gap-2">
+                    {data.skills_match.missing.map((s) => (
+                      <SkillChip key={s.skill} skill={s.skill} status="gap" hint={s.close_via} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* tracking details — Priority removed (unused); Follow-up date kept: it drives
               the "Needs attention" nudge, so it must stay editable + clearable here. */}
           {data.application && (
@@ -1040,5 +1068,26 @@ function Fact({
       <span className="text-xs font-semibold text-on-surface-variant">{label}</span>
       <span className="text-sm font-medium text-on-surface">{value || "—"}</span>
     </div>
+  );
+}
+
+// Skill status → chip color (have green / partial amber / gap red), mirroring Discovery.
+const SKILL_STATUS_COLOR: Record<string, string> = {
+  have: "var(--color-score-high)",
+  partial: "var(--color-accent-amber)",
+  gap: "var(--color-accent-red)",
+};
+
+function SkillChip({ skill, status, hint }: { skill: string; status: string; hint?: string }) {
+  const color = SKILL_STATUS_COLOR[status] ?? "var(--color-on-surface-faint)";
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium"
+      style={{ color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}
+      title={hint ? `Close via: ${hint}` : undefined}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+      {skill}
+    </span>
   );
 }

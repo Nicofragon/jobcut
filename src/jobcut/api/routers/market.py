@@ -21,13 +21,16 @@ def _payload(conn: sqlite3.Connection) -> dict:
     (the scored pipeline), composed here so `market.py` stays scores-free.
     """
     dist = surface.score_distribution(conn)
+    shortlist_gaps = surface.shortlist_skill_gaps(conn)
     data = market_mod.summary(conn)
     if data is None:
         return {"total": 0, "relevant": 0, "segments": {}, "seg_keys": [],
                 "coverage": {"pct": 0, "by_segment": {}}, "top_demand": [], "gaps": [],
                 "salary_pct": 0, "score_distribution": dist,
-                "freshness": {"n": 0, "median_age_days": 0, "weekly": []}, "empty": True}
+                "freshness": {"n": 0, "median_age_days": 0, "weekly": []},
+                "shortlist_gaps": shortlist_gaps, "empty": True}
     data["score_distribution"] = dist
+    data["shortlist_gaps"] = shortlist_gaps
     return data
 
 
