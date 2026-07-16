@@ -42,6 +42,37 @@ from pathlib import Path
 from . import db
 
 _REASON_MAX = 240
+_SKILL_MAX = 80      # per skill name
+_NOTE_MAX = 160      # per skill note
+_SKILLS_MAX = 20     # skills per list
+
+
+def _norm_skill_list(v) -> str:
+    """A per-offer skill list from a scores entry → compact JSON-in-TEXT for the DB.
+
+    Lenient: each item may be a bare name ("Python") or an object ({skill, note}). Free-form
+    — skills need not be in the taxonomy. "" when there's nothing usable, so an entry that
+    omits skills stays empty (and the API falls back to the taxonomy-regex match).
+    """
+    if not isinstance(v, list):
+        return ""
+    items = []
+    for it in v:
+        if isinstance(it, str):
+            sk = it.strip()
+            note = ""
+        elif isinstance(it, dict):
+            sk = str(it.get("skill", "")).strip()
+            note = str(it.get("note", "") or "").strip()
+        else:
+            continue
+        if not sk:
+            continue
+        obj = {"skill": sk[:_SKILL_MAX]}
+        if note:
+            obj["note"] = note[:_NOTE_MAX]
+        items.append(obj)
+    return json.dumps(items[:_SKILLS_MAX], ensure_ascii=False) if items else ""
 
 
 def load_entries(data) -> list[dict]:
@@ -84,6 +115,8 @@ def _normalize(entries: list[dict], today: str, backend: str = "claude_skills") 
             "status": status,
             "scored_date": str(e.get("scored_date") or today),
             "backend": str(e.get("backend") or backend),
+            "skills_matched": _norm_skill_list(e.get("skills_matched")),
+            "skills_missing": _norm_skill_list(e.get("skills_missing")),
         })
     return rows, errors
 

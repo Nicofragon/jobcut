@@ -27,7 +27,7 @@ from . import paths, status
 # with the local+llm_api backends). Deliberately NOT dropped on existing DBs: it holds
 # real calibration rows and jobcut never deletes user data. It is simply inert — nothing
 # reads or writes it, and a fresh install never grows one.
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 def _now_iso() -> str:
@@ -75,7 +75,12 @@ VOLATILE = ["last_seen", "applicants", "job_state"]
 # `backend` (v4): which scorer produced this row (rule_based|claude_skills). "" for rows
 # written before v4. Free text, no CHECK: historical rows may carry ids that jobcut no
 # longer offers (`local`, `llm_api` — removed in v9) and must keep rendering.
-SCORE_COLS = ["job_id", "canonical_id", "match_score", "match_reasons", "status", "scored_date", "backend"]
+# `skills_matched`/`skills_missing` (v10): JSON-in-TEXT — a Claude/Cowork per-offer skill
+# judgment (list of {skill, note}) written by `ingest-scores`. "" for rows without one
+# (rule_based, or claude rows scored before v10); the API falls back to the taxonomy-regex
+# match in that case. Free-form: skills need not be in the taxonomy (semantic, from profile.md).
+SCORE_COLS = ["job_id", "canonical_id", "match_score", "match_reasons", "status", "scored_date",
+              "backend", "skills_matched", "skills_missing"]
 
 # applications: user-owned application status. Separate from `scores` (derived) so a
 # re-score never clobbers it. PK job_id, no FK (manual/imported rows may have no job).
@@ -156,7 +161,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
           "match_reasons" TEXT,
           "status" TEXT,
           "scored_date" TEXT,
-          "backend" TEXT DEFAULT ''
+          "backend" TEXT DEFAULT '',
+          "skills_matched" TEXT DEFAULT '',
+          "skills_missing" TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS applications (
           "job_id" TEXT PRIMARY KEY,
@@ -216,6 +223,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
     score_cols = {r[1] for r in conn.execute("PRAGMA table_info(scores)").fetchall()}
     if "backend" not in score_cols:
         conn.execute("ALTER TABLE scores ADD COLUMN \"backend\" TEXT DEFAULT ''")
+
+    # v10: per-offer Claude skill judgment (JSON-in-TEXT), additive + nullable.
+    for col in ("skills_matched", "skills_missing"):
+        if col not in score_cols:
+            conn.execute(f'ALTER TABLE scores ADD COLUMN "{col}" TEXT DEFAULT \'\'')
 
     # v5: add structured tracking columns for DBs created before v5 (nullable, additive).
     app_cols = {r[1] for r in conn.execute("PRAGMA table_info(applications)").fetchall()}

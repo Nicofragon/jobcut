@@ -71,6 +71,14 @@ for scoring; `surface` is only for the final report in step 6.
    - `match_score`: integer 0–100.
    - `match_reasons`: one plain-language line on the fit.
    - `status`: `"scored"`, or `"discarded"` for a clear non-fit.
+   - `skills_matched` / `skills_missing`: the key skills **this offer** asks for, split
+     by whether the profile has them. Each item is `{ "skill": "...", "note": "..." }`
+     — `skill` is the requirement as the offer frames it (**free-form: not limited to any
+     taxonomy**), `note` is a short why ("7y, core strength" / "asked, not on the CV").
+     Judge semantically against `profile.md`, not by keyword: an offer asking for
+     "advanced SQL" when the profile has years of SQL is *matched*; a tool the profile
+     never mentions is *missing*. Keep each list to the few skills that actually decide
+     the fit (~3–6), not every buzzword. Omit both if the description is too thin to judge.
 
    Be honest and discriminating (this is the whole point of Claude scoring vs the
    rule-based floor): penalize seniority mismatches (junior posting for a senior
@@ -80,7 +88,16 @@ for scoring; `surface` is only for the final report in step 6.
 4. **Write the scores file** as JSON:
    ```json
    { "scores": [
-       { "job_id": "123", "match_score": 87, "match_reasons": "Senior data role, SQL+Python core, remote-EU", "status": "scored" }
+       { "job_id": "123", "match_score": 87,
+         "match_reasons": "Senior data role, SQL+Python core, remote-EU", "status": "scored",
+         "skills_matched": [
+           { "skill": "Advanced SQL", "note": "7y, core strength" },
+           { "skill": "Python (pandas)", "note": "on the CV" }
+         ],
+         "skills_missing": [
+           { "skill": "dbt", "note": "required, not on the CV" },
+           { "skill": "Looker", "note": "preferred, no exposure" }
+         ] }
    ] }
    ```
 
@@ -109,6 +126,12 @@ for scoring; `surface` is only for the final report in step 6.
   or anything the user *tells you happened* — that's a **note** and goes through
   `jobcut-track` (`kind:"note"`), where it shows in "Notes & activity". Putting a note
   in `match_reasons` makes it invisible as a note and corrupts the score's "why" line.
+- **`skills_matched` / `skills_missing` are per-offer and optional.** They power the
+  "Skills for this role" panel on the job detail (and feed the "Gaps in your shortlist"
+  aggregate). Free-form and judged against `profile.md` — not the taxonomy. When you omit
+  them, the console falls back to a taxonomy-regex match, so scoring without them still
+  works; providing them upgrades the panel to your semantic read. `ingest-scores` caps
+  the lists (20 skills, 80-char names, 160-char notes) and stores them on the score row.
 - This skill does **not** pull from Apify (no cost). To also fetch new jobs first, use
   the `jobcut-daily` skill, then this one to score. To then pick what to apply to (top
   10) or open the console, hand off to **jobcut-review**.

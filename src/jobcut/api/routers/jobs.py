@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,6 +31,20 @@ def get_shortlist(
 
 def _scrub_row(row) -> dict:
     return {k: (None if surface.blank(v) else str(v)) for k, v in dict(row).items()}
+
+
+def _parse_skill_cell(srow, col: str) -> list | None:
+    """Parse a scores.skills_* JSON cell into a list. None when empty/absent/malformed."""
+    if srow is None:
+        return None
+    raw = dict(srow).get(col)
+    if surface.blank(raw):
+        return None
+    try:
+        v = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return v if isinstance(v, list) and v else None
 
 
 @router.get("/jobs/{job_id}")
@@ -83,15 +98,19 @@ def get_job(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
             "estimated_at": None if surface.blank(e.get("estimated_at")) else str(e["estimated_at"]),
         }
 
-    # Per-offer skills: which of your taxonomy skills this offer asks for, split into ones
-    # you have (have/partial) vs gaps. Derived on the fly from taxonomy + offer text — no
-    # DB write, reflects taxonomy edits immediately. null when there's no offer text.
+    # Per-offer skills the user has vs lacks. Prefer Claude's persisted semantic judgment
+    # (skills_matched/missing on the score row, source="claude"); else derive on the fly
+    # from taxonomy + offer text (source="taxonomy") — the no-LLM floor, always available.
     skills_match = None
-    if job is not None:
+    cl_matched = _parse_skill_cell(srow, "skills_matched")
+    cl_missing = _parse_skill_cell(srow, "skills_missing")
+    if cl_matched or cl_missing:
+        skills_match = {"matched": cl_matched or [], "missing": cl_missing or [], "source": "claude"}
+    elif job is not None:
         tax = config.load_taxonomy(required=False)
         if tax and tax.get("skills"):
             text = f"{job.get('title', '')} {job.get('description', '')}"
-            skills_match = market.skill_matcher(tax)(text)
+            skills_match = {**market.skill_matcher(tax)(text), "source": "taxonomy"}
 
     return {"job": job, "score": score, "application": application,
             "salary_listing": salary_listing, "salary_estimate": salary_estimate,

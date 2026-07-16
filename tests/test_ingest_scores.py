@@ -39,6 +39,25 @@ def test_ingest_list_writes_scores(tmp_path):
     conn.close()
 
 
+def test_ingest_persists_per_offer_skills(tmp_path):
+    conn = db.connect()
+    # skills_matched/missing accept bare names OR {skill, note}; free-form (not taxonomy-bound)
+    path = _write(tmp_path, [
+        {"job_id": "1", "match_score": 80,
+         "skills_matched": [{"skill": "Advanced SQL", "note": "7y"}, "Python"],
+         "skills_missing": [{"skill": "dbt", "note": "asked, not on CV"}]},
+        {"job_id": "2", "match_score": 60},  # no skills → stays empty
+    ])
+    ingest.ingest_scores(path, conn)
+    sc = db.read_scores(conn)
+    matched = json.loads(sc[sc.job_id == "1"].iloc[0].skills_matched)
+    assert {m["skill"] for m in matched} == {"Advanced SQL", "Python"}
+    assert next(m for m in matched if m["skill"] == "Advanced SQL")["note"] == "7y"
+    assert json.loads(sc[sc.job_id == "1"].iloc[0].skills_missing)[0]["skill"] == "dbt"
+    assert sc[sc.job_id == "2"].iloc[0].skills_matched == ""   # empty when omitted
+    conn.close()
+
+
 def test_ingest_tags_backend(tmp_path):
     conn = db.connect()
     # default backend is claude_skills; a per-entry backend overrides it
