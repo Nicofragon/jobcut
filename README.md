@@ -196,7 +196,10 @@ Everything lives in your **data dir** (the current directory, or `$JOBCUT_DATA_D
 - **`config/config.json`** — geography (`routing`), the title filter, and scoring
   `weights`. Anything you omit falls back to built-in defaults, so you only set what you change.
 - **`profile.md`** — your target roles, real skills, and dealbreakers (read by the scorers).
-- **`config/taxonomy.json`** — skills (regex + your have/partial/gap status) for the market report.
+- **`config/taxonomy.json`** — your **skills kit**: each skill's regex + `have`/`partial`/`gap`
+  status. **Derived from `profile.md`** (the interview skill or Settings → Profile re-derive it,
+  preserving hand-tuned patterns) and shown as a colour-coded card on the Profile page. One kit
+  drives both scoring **and** the whole Discovery page (demand, coverage, gaps).
 - **`searches/*.json`** — one file per saved search = the Apify actor's input. Your real
   ones are git-ignored; ship/keep `example-*.json` as samples.
 - **`documents/`** — drop a markdown file with a `jobcut:` frontmatter block here and
@@ -231,6 +234,7 @@ interview debriefs) into a role, **add a job from a URL**, **open the console**,
 | Ask Claude… | Skill |
 |-------------|-------|
 | "let's work on my job search / is jobcut ready?" | `jobcut` (front door) |
+| "build my profile / update my skills (interview or from a CV)" | `jobcut-profile` |
 | "run my daily job search" | `jobcut-daily` |
 | "score my jobs with Claude" | `jobcut-score` |
 | "what should I apply to? / how's my pipeline?" | `jobcut-review` |

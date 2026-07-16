@@ -40,9 +40,9 @@ check what you can actually see and run:
 
 1. **The jobcut skills are loaded.** Look at the skills available to you in this
    session and confirm these are present:
-   `jobcut-daily`, `jobcut-score`, `jobcut-review`, `jobcut-track`, `jobcut-add`,
-   `jobcut-open`, `jobcut-market`, `jobcut-update`, `jobcut-salary`, `jobcut-docs`
-   (plus this one, `jobcut`).
+   `jobcut-profile`, `jobcut-daily`, `jobcut-score`, `jobcut-review`, `jobcut-track`,
+   `jobcut-add`, `jobcut-open`, `jobcut-market`, `jobcut-update`, `jobcut-salary`,
+   `jobcut-docs` (plus this one, `jobcut`).
 2. **The CLI is installed and on PATH:**
    ```
    jobcut --help
