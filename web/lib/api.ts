@@ -93,8 +93,10 @@ export type JobDetail = {
   // you have (have/partial) vs gaps. Derived from taxonomy + offer text. null with no text.
   skills_match: SkillsMatch | null;
 };
-export type OfferSkill = { skill: string; status: string; cat: string; close_via: string };
-export type SkillsMatch = { matched: OfferSkill[]; missing: OfferSkill[] };
+// A skill on an offer. Taxonomy-derived items carry status/cat/close_via; Claude-judged
+// items (source="claude") carry a free-text `note` and may omit the taxonomy fields.
+export type OfferSkill = { skill: string; status?: string; cat?: string; close_via?: string; note?: string };
+export type SkillsMatch = { matched: OfferSkill[]; missing: OfferSkill[]; source?: string };
 
 export type Funnel = {
   total: number;

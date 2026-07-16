@@ -118,13 +118,32 @@ def test_job_detail(client):
     assert body["application"] is None
     assert body["salary_estimate"] is None            # none until estimated (B-15)
 
-    # per-offer skills: the description names SQL+Python (have) and Power BI (gap).
+    # per-offer skills: rule_based leaves the skills cells empty, so the API derives them
+    # from taxonomy+text — the description names SQL+Python (have) and Power BI (gap).
     sm = body["skills_match"]
+    assert sm["source"] == "taxonomy"
     assert {s["skill"] for s in sm["matched"]} == {"SQL", "Python"}
     assert {s["skill"] for s in sm["missing"]} == {"Power BI"}
     assert next(s for s in sm["missing"] if s["skill"] == "Power BI")["close_via"] == "portfolio"
 
     assert client.get("/api/jobs/999").status_code == 404
+
+
+def test_job_detail_prefers_claude_skills(client):
+    # A Claude-judged skill list on the score row overrides the taxonomy-regex fallback,
+    # and may name skills outside the taxonomy (free-form, from profile.md).
+    conn = db.connect()
+    db.upsert_scores(conn, [{
+        "job_id": "1", "match_score": 82, "match_reasons": "x", "status": "scored",
+        "scored_date": "2026-06-16", "backend": "claude_skills",
+        "skills_matched": json.dumps([{"skill": "Advanced SQL", "note": "7y"}]),
+        "skills_missing": json.dumps([{"skill": "Kubernetes", "note": "asked, not on CV"}]),
+    }])
+    conn.close()
+    sm = client.get("/api/jobs/1").json()["skills_match"]
+    assert sm["source"] == "claude"
+    assert sm["matched"][0]["skill"] == "Advanced SQL" and sm["matched"][0]["note"] == "7y"
+    assert sm["missing"][0]["skill"] == "Kubernetes"   # not in the taxonomy — semantic
 
 
 def test_job_detail_includes_salary_estimate(client):
