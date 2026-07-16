@@ -19,8 +19,15 @@ against and what the **Discovery** page reports on (demand, coverage, gaps, heat
 directly. The only write is `jobcut ingest-profile <file.json>`. It writes the profile,
 merges the kit (your manual taxonomy edits survive), and regenerates searches.
 
-**Any language.** Interview in whatever language the user speaks; skill/role names can be
-in any language. jobcut matches them literally, so keep them as the user actually says them.
+**Bilingual by design (works in Spanish *and* English, translating as needed).** Interview
+or read a CV in whatever language the user speaks, and keep skill/role names in their own
+words. But the kit's patterns are matched against **job descriptions that may be in a
+different language than the profile** (a Spanish profile vs English postings, or vice-versa),
+so make each skill match in BOTH: add **cross-language aliases**. E.g. a Spanish user's
+`Aprendizaje automático` should also carry `machine learning`, `ML`; an English user's
+`Machine Learning` should carry `aprendizaje automático`. Include the common English tech
+term (many non-English postings use it untranslated) plus the local-language phrasing. This
+is what makes scoring and Discovery language-agnostic — don't rely on a single-language match.
 
 ## Preconditions
 
@@ -40,8 +47,11 @@ in any language. jobcut matches them literally, so keep them as the user actuall
      - `partial` — some exposure, wouldn't claim as core.
      - `gap` — skills their target roles want that they don't have yet / are learning.
    - **Dealbreakers** — hard constraints they do NOT meet (a required language, clearance…).
-   - Optionally tag each skill with a **category** and **aliases** (other names/tools that
-     mean the same skill). **Categories are free-form — use whatever groups the skills
+   - Optionally tag each skill with a **category** and **aliases**. **Aliases carry the
+     cross-language + synonym match terms** (other names/tools/spellings that mean the same
+     skill, in BOTH the user's language and English) so the kit matches a posting whatever
+     language it's in — e.g. `Aprendizaje automático` → aliases `machine learning`, `ML`.
+     **Categories are free-form — use whatever groups the skills
      naturally in the user's OWN field**, don't force a fixed set: a designer might use
      `research / interaction / visual / prototyping`; a product manager `discovery /
      delivery / analytics / leadership`; a nurse `clinical / patient-care / documentation /
@@ -63,7 +73,7 @@ in any language. jobcut matches them literally, so keep them as the user actuall
      "skills": [
        { "name": "Figma",             "status": "have",    "category": "visual",       "aliases": ["sketch"] },
        { "name": "Design systems",    "status": "have",    "category": "systems" },
-       { "name": "User research",     "status": "partial", "category": "research",      "aliases": ["usability testing"] },
+       { "name": "User research",     "status": "partial", "category": "research",      "aliases": ["usability testing", "investigación de usuarios"] },
        { "name": "Prototyping",       "status": "have",    "category": "interaction" },
        { "name": "Front-end (HTML/CSS)","status": "gap",   "category": "engineering" }
      ]

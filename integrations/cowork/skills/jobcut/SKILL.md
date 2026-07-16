@@ -130,6 +130,11 @@ note (or status/field/round) and goes through `jobcut-track`.
   skills do the writes through their own CLI commands.
 - Hard-codes no path, profile, or company. The readiness check verifies by what's
   actually loaded and what the CLI reports — so it works for any user, any data dir.
+- **Bilingual (works in Spanish *and* English), any field.** Talk to the user in their
+  language. The profile and the job postings may be in different languages — the skills
+  judge and match across languages, translating as needed (`jobcut-profile` gives skills
+  cross-language aliases; `jobcut-score` matches offers semantically regardless of language).
+  Nothing assumes a role or a language.
 - Once readiness passes, you don't need to re-run it every turn — just at the start of
   a session, or whenever a jobcut action behaves unexpectedly (e.g. a skill seems
   missing or a write didn't show up).
