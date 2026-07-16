@@ -51,7 +51,8 @@ installed code.
 ├── profile.md           # your roles, skills, dealbreakers  ← drives scoring
 ├── config/
 │   ├── config.json      # geography, title filter, scoring weights
-│   └── taxonomy.json    # skills (regex + have/partial/gap) for the market report
+│   └── taxonomy.json    # your skills "kit" (regex + have/partial/gap) — derived from
+│                        #   profile.md; the single base that drives BOTH scoring and Discovery
 ├── searches/*.json      # one file per saved LinkedIn search
 ├── jobcut.db          # the canonical SQLite store (jobs, scores, applications, events)
 └── out/                 # generated outputs (shortlist, market report, exports)
@@ -73,6 +74,13 @@ Then you edit four things (once):
 | `profile.md` | Target roles, real skills, dealbreakers. **The highest-leverage file** — bad profile in, bad matches out. |
 | `config/config.json` | Your geography under `routing`; optionally tweak the title filter and scoring `weights`. |
 | `searches/*.json` | Your saved searches (titles, locations, recency). One file = one search. |
+
+You don't have to write `profile.md` by hand. The **`jobcut-profile`** Cowork skill
+interviews you (or reads a pasted CV), splits your skills into **have / partial / gap**,
+and writes both `profile.md` and the derived skills **kit** in one step — see
+[§7](#7-driving-jobcut-from-claude-cowork-skills). The onboarding wizard and Settings →
+Profile do the same from a form. However it's authored, the profile is the one input the
+rest of the pipeline keys off.
 
 ---
 
@@ -178,9 +186,9 @@ already applied to**, so they never clutter the shortlist again.
 jobcut market
 ```
 
-Analyzes the **whole database** (not just the funnel). For the data/analytics
-segment it counts how often each skill (from `taxonomy.json`) is demanded, crosses
-it with your have/partial/gap status, and writes:
+Analyzes the **whole database** (not just the funnel). It counts how often each skill
+in your **kit** (`taxonomy.json`, derived from `profile.md`) is demanded across the
+market, crosses that with your **have / partial / gap** status on each, and writes:
 
 - **`out/market-gaps.md`** — demand vs your profile, prioritized gaps.
 - **`out/market-dashboard.html`** — an interactive chart.
@@ -314,7 +322,97 @@ list and updates your funnel.
 
 ---
 
-## 7. Two rules that define the project
+## 7. Driving jobcut from Claude (Cowork skills)
+
+jobcut ships a set of **Claude skills** so you can run the whole pipeline — and build
+your profile — by chatting, through the `jobcut` CLI, never raw SQL. They work in
+**Claude Cowork** (desktop) and **Claude Code** (CLI).
+
+### Setup — install all the skills once
+
+The skills live in [`integrations/cowork/skills/`](../integrations/cowork/skills/); the
+full guide is [`integrations/cowork/SETUP.md`](../integrations/cowork/SETUP.md). Code and
+Cowork install them differently:
+
+- **Claude Code** reads a folder — copy them in:
+  ```bash
+  bash integrations/cowork/install.sh          # -> ~/.claude/skills, then reload Claude
+  ```
+- **Claude Cowork** imports one skill per file — build a zip per skill and upload each:
+  ```bash
+  bash integrations/cowork/install.sh --zip    # -> ./jobcut-skill-zips
+  ```
+  Then **Customize → Upload skill** for each `<skill>.zip`. **Start with `jobcut.zip`** —
+  it's the front door; the other eleven are the workers it dispatches to.
+
+Then say **"is jobcut ready?"**. The **`jobcut`** front-door skill confirms every skill is
+loaded and the CLI + data dir resolve, tells you what to fix if not, and routes you to the
+right skill. Run it first each session.
+
+> **One run owner.** The daily pull is a paid Apify actor — pick exactly one runner (the
+> in-app scheduler, the `jobcut-daily` skill, or your own cron) so the same searches aren't
+> scraped twice. If the in-app scheduler is on, have Claude run `jobcut-daily` with
+> `pull --read` (a free re-download).
+
+### The skills, and where each writes
+
+Every skill reads via `jobcut <cmd> --json` and writes **only** through a `jobcut ingest-*`
+/ CLI command — the CLI is the single schema authority.
+
+| Skill | Does | Writes via |
+|---|---|---|
+| `jobcut` | Front door: readiness check + routing | — (read-only) |
+| `jobcut-profile` | **Build/update your profile** by interview or CV → `profile.md` + skills kit | `ingest-profile` |
+| `jobcut-daily` | The daily run: pull → score → surface today's top matches | pipeline (`pull`/`score`) |
+| `jobcut-score` | Score/re-score jobs already in the DB, judged by Claude | `ingest-scores` |
+| `jobcut-review` | Read-only: what to apply to, pipeline/weekly stats | — (read-only) |
+| `jobcut-track` | Update an application — note, interview round, status, fields | `ingest-events` |
+| `jobcut-docs` | Save a prep/study/debrief document into an application | `ingest-documents` |
+| `jobcut-add` | Add a job from a URL (company site / Lever / Greenhouse) | `add-job` |
+| `jobcut-open` | Launch the web console from chat | — |
+| `jobcut-market` | Summarize demand vs your kit (Discovery, read-only) | — (read-only) |
+| `jobcut-salary` | Estimate a salary band for offers that disclose none | `ingest-salary` |
+| `jobcut-update` | Pull latest code, rebuild + restart the console | — |
+
+### How Claude builds the profile, and how it feeds scoring + Discovery
+
+This is the chain the whole tool rests on — **one profile, one kit, two consumers:**
+
+```text
+  jobcut-profile (interview / CV)                    profile.md  (human-readable record)
+        │  extract skills → have / partial / gap          │
+        ▼                                                  ▼
+  jobcut ingest-profile ──────────────▶  config/taxonomy.json  = your skills KIT
+                                            (per skill: status + category + regex)
+                                                  │                       │
+                             drives ◀─────────────┘                       └────▶ drives
+                                  ▼                                                 ▼
+                    SCORING  (the +20 "stack" component,               DISCOVERY (jobcut-market)
+                     rule_based or claude_skills)                      demand · coverage · prioritized gaps
+```
+
+1. **Skills extraction — `jobcut-profile`.** Claude interviews you (any language) or reads a
+   pasted CV and splits your skills into **have** (real strengths), **partial** (some
+   exposure), and **gap** (your target roles want it; you're learning it). One
+   `jobcut ingest-profile` writes `profile.md` *and* re-derives the kit, **merging** so any
+   hand-tuned taxonomy patterns survive. Updating one skill ("I learned dbt — move it to
+   have") is the same call with the new status. (See
+   [§8 of the manual](MANUAL.md#8-profile-derived-targeting-role-agnostic) for the grammar.)
+2. **Scoring uses the kit.** Both backends judge against the same profile-derived skills:
+   `rule_based` matches the kit's regex for its **+20 stack** component; `claude_skills`
+   (the `jobcut-score` skill) reads each job and judges it against your profile, writing
+   verdicts back via `ingest-scores`. Same base, different judge.
+3. **Discovery uses the same kit.** `jobcut-market` (the Discovery page) counts market
+   demand for each kit skill and crosses it with your have/partial/gap status to compute
+   **coverage** and a **prioritized gap** list — so what you're missing, and what to learn
+   next, comes straight from the profile you built.
+
+Because scoring and Discovery share one kit, a better profile improves both at once — and
+nothing is hardwired to a role (it works the same for a nurse or a data analyst).
+
+---
+
+## 8. Two rules that define the project
 
 1. **Never triggers a paid Apify run without you asking.** `--read` is free; a bare
    `pull` is the only thing that spends, and it's never automatic in dev.
