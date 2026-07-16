@@ -20,6 +20,53 @@ import pandas as pd
 from . import config, db, paths
 
 
+# applicant-count bands for the competition view (how crowded your market is).
+_APPLICANT_BANDS = [(0, 20, "Low"), (20, 100, "Moderate"), (100, 10**9, "Crowded")]
+_INT_RE = re.compile(r"\d[\d,\.]*")
+
+
+def _first_int(x):
+    """First integer in a free-text cell ("Over 200 applicants" → 200). None if none."""
+    m = _INT_RE.search(str(x))
+    return int(m.group(0).replace(",", "").replace(".", "")) if m else None
+
+
+def _signals(rel, seg_keys) -> dict:
+    """Competition (applicants) + freshness (posting velocity) over the relevant market.
+
+    Both dimensions have ~full coverage in the data (unlike disclosed salary, which sits
+    near 3% with mixed currencies/periods and is deliberately NOT turned into bands here).
+    """
+    # --- competition: parsed applicant counts ---
+    appl = rel["applicants"].map(_first_int).dropna() if "applicants" in rel else pd.Series(dtype=float)
+    comp_bands = [{"label": lbl, "min": lo, "max": (None if hi >= 10**9 else hi),
+                   "count": int(((appl >= lo) & (appl < hi)).sum())} for lo, hi, lbl in _APPLICANT_BANDS]
+    by_seg_median = {}
+    for seg in seg_keys:
+        sa = rel.loc[rel.segment == seg, "applicants"].map(_first_int).dropna() if len(rel) else pd.Series(dtype=float)
+        by_seg_median[seg] = int(sa.median()) if len(sa) else 0
+    competition = {"n": int(len(appl)),
+                   "median": int(appl.median()) if len(appl) else 0,
+                   "bands": comp_bands, "by_segment": by_seg_median}
+
+    # --- freshness: posting date (fallback first_seen), weekly inflow + median age ---
+    posted = pd.to_datetime(rel.get("posted_date"), errors="coerce") if len(rel) else pd.Series(dtype="datetime64[ns]")
+    if len(rel):
+        posted = posted.fillna(pd.to_datetime(rel.get("first_seen"), errors="coerce"))
+    posted = posted.dropna()
+    weekly, median_age = [], 0
+    if len(posted):
+        labels = posted.dt.strftime("%G-W%V")
+        counts = labels.value_counts()
+        for w in sorted(counts.index)[-10:]:                 # last 10 ISO weeks present
+            weekly.append({"week": w, "count": int(counts[w])})
+        today = pd.Timestamp(datetime.date.today())
+        median_age = int((today - posted).dt.days.median())
+    freshness = {"n": int(len(posted)), "median_age_days": median_age, "weekly": weekly}
+
+    return {"competition": competition, "freshness": freshness}
+
+
 def compute(conn) -> dict | None:
     """Read-only market computation (no file writes). None when there are no jobs."""
     tax = config.load_taxonomy(required=True)
@@ -68,7 +115,8 @@ def compute(conn) -> dict | None:
     top = sorted(skills.items(), key=lambda kv: -kv[1]["pct"])[:18]
 
     return {"total": total, "R": R, "seg_keys": seg_keys, "skills": skills,
-            "segcounts": segcounts, "salary": salary, "gaps": gaps, "top": top}
+            "segcounts": segcounts, "salary": salary, "gaps": gaps, "top": top,
+            **_signals(rel, seg_keys)}
 
 
 # status → how much of the demand it "covers" (have = full, partial = half, gap = none).
@@ -144,6 +192,7 @@ def summary(conn) -> dict | None:
         "gaps": [{"skill": g["skill"], "pct": g["pct"], "status": g["status"],
                   "close_via": g["close_via"], "n": g["n"], "cat": g["cat"]}
                  for g in c["gaps"][:8]],
+        "competition": c["competition"], "freshness": c["freshness"],
     }
 
 

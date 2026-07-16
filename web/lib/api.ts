@@ -401,6 +401,17 @@ export type SkillGap = {
 // Distribution of your scored offers across match-score bands (pipeline quality).
 export type ScoreBand = { label: string; min: number; max: number; count: number };
 export type ScoreDistribution = { total: number; median: number; bands: ScoreBand[] };
+// How crowded your market is, from parsed applicant counts.
+export type CompetitionBand = { label: string; min: number; max: number | null; count: number };
+export type Competition = {
+  n: number;
+  median: number;
+  bands: CompetitionBand[];
+  by_segment: Record<string, number>;
+};
+// Posting velocity: offers per ISO week (last 10) + median offer age.
+export type WeeklyInflow = { week: string; count: number };
+export type Freshness = { n: number; median_age_days: number; weekly: WeeklyInflow[] };
 export type Market = {
   total: number;
   relevant: number;
@@ -412,6 +423,8 @@ export type Market = {
   gaps: SkillGap[];
   salary_pct: number;
   score_distribution: ScoreDistribution;
+  competition: Competition;
+  freshness: Freshness;
   empty?: boolean;
 };
 export const getMarket = () => api<Market>("/market");
