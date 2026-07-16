@@ -39,6 +39,24 @@ your real jobs, profile, and applications never leave your machine.
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    S["Saved searches<br/>searches/*.json"] --> AP["Apify<br/>harvestapi/linkedin-job-search"]
+    AP --> DB[("SQLite · jobcut.db<br/>upsert · never deletes")]
+    DB --> RT["Route<br/>geo gate"]
+    RT --> FT["Filter<br/>title regex · collapse reposts"]
+    FT --> SC{"Score 0–100<br/>vs profile.md"}
+    SC -->|rule_based · live| RB["Pure Python rubric<br/>no key · offline"]
+    SC -->|claude_skills · ingest-first| CL["Claude reads each job<br/>→ ingest-scores"]
+    RB --> SU["Surface<br/>ranked shortlist"]
+    CL --> SU
+    DB --> MK["Market<br/>skill demand vs gaps"]
+    SU --> API["FastAPI bridge · /api"]
+    API --> WEB["Next.js console<br/>(primary UI)"]
+    DB -. read + status .-> ST["Streamlit lite<br/>(no Node)"]
+    WEB --> TR[("applications table<br/>funnel · status · rounds")]
+```
+
 - **SQLite is the canonical store** — a single local file (`jobcut.db`). The
   CSV/JSON/Markdown files in `out/` are *exports*, not the engine. SQLite is the
   contract between the pipeline and every frontend.
@@ -70,6 +88,49 @@ your real jobs, profile, and applications never leave your machine.
 
 📖 **New here? Read the [full workflow walkthrough](docs/WORKFLOW.md)** — every stage
 explained, from the Apify pull to tracking applied roles.
+
+## Design decisions
+
+- **Local-first on SQLite, not a hosted DB.** The only network call is the explicit Apify
+  scrape — everything else (your profile, scores, applications) stays on your machine. Cost is
+  ~$0 and privacy is the default, at the price of no multi-device sync (an intentional trade).
+- **Two scoring backends, both free.** `rule_based` is the *live* floor — a transparent
+  pure-Python rubric with no key that works offline; `claude_skills` is *ingest-first* — Claude
+  reads each job outside jobcut and loads verdicts via `jobcut ingest-scores`. Picking the
+  Claude backend tells `jobcut score` to stand aside rather than quietly rubric-scoring rows
+  you expected Claude to judge.
+- **Status is its own table.** Application status lives in an `applications` table, separate
+  from the derived `scores`, so a re-score never clobbers your funnel.
+- **Role-agnostic and profile-driven.** Searches, filters, and the scoring rubric are derived
+  from your `profile.md` — nothing is hardcoded to a field, so it works for a nurse or a data
+  analyst.
+- **It never applies for you.** jobcut finds and ranks; the apply decision stays human by design.
+- **Dogfooding as a portfolio angle.** I run jobcut for my own search, and because it never
+  deletes rows it doubles as a living dataset of what the market is actually asking for.
+
+## Evaluation
+
+> ⚠️ **Template — not results.** The numbers below are placeholders. Fill them in from your
+> own runs; nothing here is a claimed benchmark.
+
+Scoring is the core, so the eval asks: *does the shortlist agree with a human?* Label a sample
+of jobs by hand ("would I apply?") and compare the rubric's 0–100 against those labels.
+
+| Metric | What it measures | Result |
+|--------|------------------|:------:|
+| Precision @ top-N | Of the top-N surfaced jobs, how many you'd actually apply to | _TBD_ |
+| Rank correlation | Spearman between rubric score and your hand ranking | _TBD_ |
+| Filter false-negatives | Good jobs wrongly dropped by the route/title filters | _TBD_ |
+| rule_based vs claude_skills | Agreement between the two backends on the same jobs | _TBD_ |
+| Dedupe rate | Duplicate/repost rows correctly collapsed | _TBD_ |
+
+**Method**
+
+1. Pull a run and hand-label ~30–50 jobs as apply / maybe / skip.
+2. Score them with `rule_based`, then again with `claude_skills`.
+3. Compute precision@N and rank correlation against your labels; tune weights in
+   `config/config.json` and re-run.
+4. Inspect filtered-out rows for false negatives, and check the dedupe against raw pull counts.
 
 ## Quick start
 
