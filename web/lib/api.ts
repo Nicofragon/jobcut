@@ -377,12 +377,36 @@ export type ScoringBackend = {
 };
 export const getScoringBackends = () => api<ScoringBackend[]>("/scoring/backends");
 
+// One skill: market demand (pct/n) crossed with your taxonomy status + how you'd close it.
+// `by_seg` is demand per role segment (skill × segment); `trend` is the pp move vs the
+// previous market snapshot (null when there's no history to compare against yet).
+export type SkillDemand = {
+  skill: string;
+  pct: number;
+  status: string; // have | partial | gap
+  cat: string;
+  close_via: string; // course | portfolio | cv-reframe | skip | ""
+  n: number;
+  by_seg: Record<string, number>;
+  trend: number | null;
+};
+export type SkillGap = {
+  skill: string;
+  pct: number;
+  status: string; // partial | gap
+  close_via: string;
+  n: number;
+  cat: string;
+};
 export type Market = {
   total: number;
   relevant: number;
   segments: Record<string, number>;
-  top_demand: { skill: string; pct: number; status: string }[];
-  gaps: string[];
+  seg_keys: string[];
+  // Profile coverage: of the demand (weighted by % of offers), how much you already have.
+  coverage: { pct: number; by_segment: Record<string, number> };
+  top_demand: SkillDemand[];
+  gaps: SkillGap[];
   salary_pct: number;
   empty?: boolean;
 };

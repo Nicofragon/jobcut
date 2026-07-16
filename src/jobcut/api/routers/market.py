@@ -17,7 +17,8 @@ def get_market(conn: sqlite3.Connection = Depends(get_conn)):
     """Read-only market summary (no file writes). Empty payload when no jobs yet."""
     data = market_mod.summary(conn)
     if data is None:
-        return {"total": 0, "relevant": 0, "segments": {}, "top_demand": [],
+        return {"total": 0, "relevant": 0, "segments": {}, "seg_keys": [],
+                "coverage": {"pct": 0, "by_segment": {}}, "top_demand": [],
                 "gaps": [], "salary_pct": 0, "empty": True}
     return data
 
