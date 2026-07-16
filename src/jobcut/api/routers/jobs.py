@@ -6,7 +6,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ... import db, salaryparse, surface
+from ... import config, db, market, salaryparse, surface
 from ..deps import get_conn
 
 router = APIRouter(tags=["jobs"])
@@ -83,5 +83,16 @@ def get_job(job_id: str, conn: sqlite3.Connection = Depends(get_conn)):
             "estimated_at": None if surface.blank(e.get("estimated_at")) else str(e["estimated_at"]),
         }
 
+    # Per-offer skills: which of your taxonomy skills this offer asks for, split into ones
+    # you have (have/partial) vs gaps. Derived on the fly from taxonomy + offer text — no
+    # DB write, reflects taxonomy edits immediately. null when there's no offer text.
+    skills_match = None
+    if job is not None:
+        tax = config.load_taxonomy(required=False)
+        if tax and tax.get("skills"):
+            text = f"{job.get('title', '')} {job.get('description', '')}"
+            skills_match = market.skill_matcher(tax)(text)
+
     return {"job": job, "score": score, "application": application,
-            "salary_listing": salary_listing, "salary_estimate": salary_estimate}
+            "salary_listing": salary_listing, "salary_estimate": salary_estimate,
+            "skills_match": skills_match}

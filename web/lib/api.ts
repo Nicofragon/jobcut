@@ -89,7 +89,12 @@ export type JobDetail = {
   salary_listing: string | null;
   // B-15: a Cowork-estimated band when the employer didn't disclose one. null otherwise.
   salary_estimate: SalaryEstimate | null;
+  // Per-offer skills: which of your taxonomy skills this offer asks for, split into ones
+  // you have (have/partial) vs gaps. Derived from taxonomy + offer text. null with no text.
+  skills_match: SkillsMatch | null;
 };
+export type OfferSkill = { skill: string; status: string; cat: string; close_via: string };
+export type SkillsMatch = { matched: OfferSkill[]; missing: OfferSkill[] };
 
 export type Funnel = {
   total: number;
@@ -404,6 +409,9 @@ export type ScoreDistribution = { total: number; median: number; bands: ScoreBan
 // Posting velocity: offers per ISO week (last 10) + median offer age.
 export type WeeklyInflow = { week: string; count: number };
 export type Freshness = { n: number; median_age_days: number; weekly: WeeklyInflow[] };
+// Gap skills the offers you'd actually apply to (score ≥ floor) ask for most.
+export type ShortlistGap = { skill: string; n: number; pct: number; close_via: string; cat: string };
+export type ShortlistGaps = { n: number; gaps: ShortlistGap[] };
 export type Market = {
   total: number;
   relevant: number;
@@ -416,6 +424,7 @@ export type Market = {
   salary_pct: number;
   score_distribution: ScoreDistribution;
   freshness: Freshness;
+  shortlist_gaps: ShortlistGaps;
   empty?: boolean;
 };
 export const getMarket = () => api<Market>("/market");

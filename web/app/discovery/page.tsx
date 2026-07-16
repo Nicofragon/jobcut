@@ -9,6 +9,7 @@ import {
   type SkillGap,
   type ScoreDistribution,
   type Freshness,
+  type ShortlistGaps,
 } from "@/lib/api";
 import { Icon } from "@/components/icons";
 import { ErrorNote, Loading } from "@/components/States";
@@ -165,6 +166,8 @@ export default function DiscoveryPage() {
           emptyNote="Nothing to reframe right now."
         />
       </div>
+
+      <ShortlistGapsCard data={data.shortlist_gaps} />
 
       <FreshnessCard fresh={data.freshness} />
 
@@ -478,6 +481,45 @@ function GapPlan({
       ) : (
         <p className="mt-3 text-sm text-on-surface-variant">{emptyNote}</p>
       )}
+    </section>
+  );
+}
+
+// Gap skills the offers you actually match (score ≥ floor) ask for most — shortlist-scoped,
+// distinct from the market-wide gaps above. Closing these lifts the roles you'd apply to.
+function ShortlistGapsCard({ data }: { data: ShortlistGaps }) {
+  if (!data.n || data.gaps.length === 0) return null;
+  const max = Math.max(1, ...data.gaps.map((g) => g.pct));
+  return (
+    <section className="rounded-card border border-border bg-surface p-5 shadow-card">
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-semibold text-on-surface">Gaps in your shortlist</h2>
+        <span className="text-xs text-on-surface-variant">across {data.n} offers you match (score ≥ 60)</span>
+      </div>
+      <p className="mb-4 text-sm text-on-surface-variant">
+        Gap skills the roles you&apos;re a real match for ask for most — closing these lifts the offers you&apos;d
+        actually apply to.
+      </p>
+      <div className="space-y-2.5">
+        {data.gaps.map((g) => (
+          <div key={g.skill} className="flex items-center gap-3" role="img" aria-label={`${g.skill}: ${g.pct}% of your matched offers`}>
+            <span className="w-32 shrink-0 truncate text-sm text-on-surface" title={g.skill}>
+              {g.skill}
+            </span>
+            <div className="h-5 flex-1 overflow-hidden rounded-full bg-surface-sunken">
+              <div className="h-full rounded-full" style={{ width: `${(100 * g.pct) / max}%`, background: "var(--color-accent-red)" }} />
+            </div>
+            <span className="w-10 shrink-0 text-right text-sm tabular-nums text-on-surface">{g.pct}%</span>
+            <span
+              className="hidden shrink-0 rounded-full px-2 py-0.5 text-xs font-medium text-primary sm:inline"
+              style={{ background: "var(--color-primary-tint)" }}
+              title={`${g.n} of your matched offers mention this`}
+            >
+              {closeViaLabel(g.close_via)}
+            </span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

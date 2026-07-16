@@ -117,6 +117,13 @@ def test_job_detail(client):
     assert body["score"]["backend"] == "rule_based"   # score.run tags the effective backend
     assert body["application"] is None
     assert body["salary_estimate"] is None            # none until estimated (B-15)
+
+    # per-offer skills: the description names SQL+Python (have) and Power BI (gap).
+    sm = body["skills_match"]
+    assert {s["skill"] for s in sm["matched"]} == {"SQL", "Python"}
+    assert {s["skill"] for s in sm["missing"]} == {"Power BI"}
+    assert next(s for s in sm["missing"] if s["skill"] == "Power BI")["close_via"] == "portfolio"
+
     assert client.get("/api/jobs/999").status_code == 404
 
 
@@ -419,6 +426,11 @@ def test_market(client):
     fresh = body["freshness"]
     assert fresh["n"] == 2 and fresh["weekly"] and fresh["median_age_days"] >= 0
     assert "competition" not in body
+
+    # shortlist gaps: the in-market analyst offers (score ≥ 60) all name Power BI (a gap).
+    sg = body["shortlist_gaps"]
+    assert sg["n"] >= 1
+    assert "Power BI" in {g["skill"] for g in sg["gaps"]}
 
     # POST (Refresh) must return the SAME enriched shape as GET — never the old flat one.
     refreshed = client.post("/api/market").json()

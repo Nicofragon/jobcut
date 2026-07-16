@@ -20,6 +20,30 @@ import pandas as pd
 from . import config, db, paths
 
 
+def skill_matcher(taxonomy):
+    """Precompile the taxonomy once, return match(text) → per-offer skill breakdown.
+
+    For a single offer's text: which of YOUR taxonomy skills it asks for, split by your
+    status — `matched` (have/partial, point to them) vs `missing` (gap it wants). Pure
+    function of (offer text, taxonomy); no scores, no DB write, re-derives on any edit.
+    Used per-offer (job detail) and in bulk (shortlist aggregate), hence the precompile.
+    """
+    compiled = [(name, spec.get("status", ""), spec.get("cat", ""), spec.get("close_via", ""),
+                 [re.compile(p, re.I) for p in spec.get("patterns", [])])
+                for name, spec in taxonomy.get("skills", {}).items()]
+
+    def match(text) -> dict:
+        t = str(text)
+        matched, missing = [], []
+        for name, status, cat, close_via, pats in compiled:
+            if any(p.search(t) for p in pats):
+                item = {"skill": name, "status": status, "cat": cat, "close_via": close_via}
+                (missing if status == "gap" else matched).append(item)
+        return {"matched": matched, "missing": missing}
+
+    return match
+
+
 def _signals(rel) -> dict:
     """Freshness (posting velocity) over the relevant market. Read-only, jobs-only.
 
