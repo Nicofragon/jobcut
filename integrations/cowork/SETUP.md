@@ -71,7 +71,7 @@ bash integrations/cowork/install.sh --zip ~/Desktop/jobcut-skills   # somewhere 
 
 Then in Cowork: **Customize → Upload skill**, and drop in each `<skill>.zip`.
 Start with **`jobcut.zip`** — it's the front door (readiness check + routing); the
-other ten are the workers it dispatches to. It's a one-time setup (≈11 uploads);
+other eleven are the workers it dispatches to. It's a one-time setup (≈12 uploads);
 after importing, the skills appear under Customize — no reload needed. Then say
 **"let's work on my job search with jobcut"** / **"is jobcut ready?"** to have
 the front door verify everything and route you.

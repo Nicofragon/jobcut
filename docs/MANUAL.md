@@ -23,7 +23,8 @@
 15. [Cost and security](#15-cost-and-security)
 16. [Configuration (reference)](#16-configuration-reference)
 17. [Troubleshooting](#17-troubleshooting)
-18. [Glossary](#18-glossary)
+18. [Driving jobcut from Claude (Cowork skills)](#18-driving-jobcut-from-claude-cowork-skills)
+19. [Glossary](#19-glossary)
 
 ---
 
@@ -252,37 +253,63 @@ in the console they're **read-only** ("Prep documents" view in the detail).
 **Nothing is hardwired to a role.** Your searches and your rubric are **derived from
 `profile.md`** — it works just as well for a nurse as for a data analyst.
 
-`profile.md` has stable headings that the system parses (`profile.py`):
+`profile.md` has stable headings that the system parses (`profile.py`), and your skills are
+split by **how you stand on each** — the same have / partial / gap language Discovery and the
+scorer use:
 
 - `## Target roles` → target titles
-- `## Core skills` → skills you have today
-- `## Nice-to-have / learning` → "plus" skills
+- `## Seniority` → one line (kept as a human note)
+- `## Core skills` → skills you can do today → status **`have`**
+- `## Nice-to-have / learning` → some exposure → status **`partial`**
+- `## Skill gaps` → skills your target roles want that you don't have yet → status **`gap`**
 - `## Location & work mode` → `Based in:` and `Remote:`
 - `## Dealbreakers` → requirements you do NOT meet
 
-From that it **generates** (non-destructive: it doesn't overwrite existing files unless you force it):
+Older profiles (written before the `## Skill gaps` heading existed) still parse cleanly — a
+missing section just yields no gaps.
+
+### The skills "kit" — one base for scoring **and** Discovery
+
+From the profile, `profile.py` **derives** the artifacts below. The important one is
+`config/taxonomy.json` — your skills **kit**: each skill carries a **status**
+(`have`/`partial`/`gap`), a **category** (core / viz / dataeng / …), a **regex** (name +
+aliases), and a `close_via` for the gaps. This one kit is the single base for both the
+**+20 "stack"** scoring component **and** the whole **Discovery** page.
 
 | Derived | Where it comes from | What uses it |
 |---|---|---|
 | `searches/*.json` | target roles + remote mode (geoId = placeholder to fill in) | the pull |
 | `filter.include_titles` | target roles (without seniority) | the filter |
 | `routing.home` / `routing.region` | tokens from `Based in:` (region = country) | the route |
-| `taxonomy.skills` | core skills (status `have`) | the score (stack) + market |
-| `scoring.signals` | nice-to-have skills | the score (bonus) |
-| `scoring.dealbreakers` | Dealbreakers section (best-effort, review it) | the score (penalty) |
+| `taxonomy.skills` | **every skill** with its status/category/aliases (the kit) | scoring (stack) **+** Discovery |
+| `scoring.signals` | `partial` skills | scoring (bonus) |
+| `scoring.dealbreakers` | Dealbreakers section (best-effort, review it) | scoring (penalty) |
 
-From the console: **Settings → Profile** edits the profile, "Regenerate" generates the
-artifacts, and a re-score applies the new rubric. The editor is a **structured
-form** (no markdown on view): profile fields go through
-`GET/PUT /api/profile/structured` (over the same headings), and the raw `profile.md` is still
-available at `GET/PUT /api/profile`. Searches are also edited as a friendly form via
-`GET …/searches/structured` + the `/searches/structured` CRUD. (Derived:
-`GET /api/profile/derived` previews; `POST /api/profile/derive` writes.)
+Derivation is a **merge, not a clobber**: re-deriving preserves manual taxonomy edits
+(extra patterns, `close_via`, and skills you added by hand); only `--force` regenerates from
+scratch. It runs automatically when you save the profile, and non-destructively — so an
+existing hand-tuned taxonomy (or a profile with custom, non-managed headings) survives an
+upgrade untouched.
 
-**CV → profile (optional AI layer):** you upload a CV (`txt/md` always; `pdf/docx` with the
-`[cv]` extra); if an LLM key is present, the AI drafts a `profile.md` with the headings;
-if not, it falls back to a *scaffold* with the CV text for you to organize. **It's never saved
-on its own** — you review and confirm.
+### Three ways to build the profile
+
+1. **`jobcut-profile` Cowork skill (conversational).** Claude interviews you (any language)
+   or reads a pasted CV, splits your skills into have/partial/gap, and writes `profile.md` +
+   the kit in one step via `jobcut ingest-profile`. Updating one skill ("I learned dbt —
+   move it to have") is the same flow with the new status. See
+   [§18](#18-driving-jobcut-from-claude-cowork-skills).
+2. **The console form.** **Settings → Profile** (and the onboarding wizard) edit the profile
+   as a **structured form** (no markdown on view): fields go through
+   `GET/PUT /api/profile/structured`; the raw `profile.md` is still at `GET/PUT /api/profile`.
+   "Regenerate" writes the derived artifacts and a re-score applies the new rubric. The kit is
+   shown back as a **colour-coded "Your skills kit" card** (have = green, partial = amber,
+   gap = red) on the Profile page, with a compact summary in Settings. (Derived:
+   `GET /api/profile/derived` previews; `POST /api/profile/derive` writes.)
+3. **CV upload (optional AI layer).** Upload a CV (`txt/md` always; `pdf/docx` with the `[cv]`
+   extra); with an LLM key present, the AI drafts a `profile.md` with the headings — including
+   splitting skills across Core / Nice-to-have / Skill gaps by how strongly the CV evidences
+   each; without a key it falls back to a *scaffold* with the CV text to organize. **Never
+   saved on its own** — you review and confirm.
 
 ---
 
@@ -544,7 +571,100 @@ API base in the front end).
 
 ---
 
-## 18. Glossary
+## 18. Driving jobcut from Claude (Cowork skills)
+
+jobcut ships a set of **Claude skills** so an agent can run the whole pipeline — and build
+your profile — by chatting, always through the `jobcut` CLI, **never raw SQL**. They work in
+**Claude Cowork** (desktop) and **Claude Code** (CLI). Full guide:
+[`integrations/cowork/SETUP.md`](../integrations/cowork/SETUP.md).
+
+### 18.1 Install all the skills (once)
+
+Code and Cowork install skills differently:
+
+- **Claude Code** reads a folder — copy them in, then reload Claude:
+  ```bash
+  bash integrations/cowork/install.sh          # -> ~/.claude/skills
+  ```
+- **Claude Cowork** imports one skill per file — build a zip per skill and upload each via
+  **Customize → Upload skill**:
+  ```bash
+  bash integrations/cowork/install.sh --zip    # -> ./jobcut-skill-zips
+  ```
+  **Start with `jobcut.zip`** (the front door); the other eleven are the workers it
+  dispatches to. It's a one-time setup (≈12 uploads); no reload needed.
+
+Point Claude at the **same data dir** as the CLI by exporting `JOBCUT_DATA_DIR` in the
+environment Claude runs in. Then say **"is jobcut ready?"** — the **`jobcut`** front-door
+skill confirms every skill is loaded and the CLI + data dir resolve, says what to fix if not,
+and routes you to the right skill. Run it first each session.
+
+> **One run owner (cost rule).** The daily pull is a paid Apify actor. Pick exactly one
+> runner — the in-app scheduler (Settings → Automation), the `jobcut-daily` skill, or your
+> own cron — so the same searches aren't scraped, and paid for, twice. If the scheduler is
+> on, have Claude run `jobcut-daily` with `pull --read` (a free re-download).
+
+### 18.2 The skills
+
+Each reads via `jobcut <cmd> --json` and writes **only** through a `jobcut ingest-*` / CLI
+command — the CLI is the single schema authority (never the DB directly).
+
+| Skill | Does | Writes via |
+|---|---|---|
+| `jobcut` | Front door: readiness check + routing | — (read-only) |
+| `jobcut-profile` | **Build/update your profile** by interview or CV → `profile.md` + kit | `ingest-profile` |
+| `jobcut-daily` | The daily run: pull → score → surface today's top matches | `pull` / `score` |
+| `jobcut-score` | Score/re-score jobs already in the DB, judged by Claude | `ingest-scores` |
+| `jobcut-review` | Read-only: what to apply to, pipeline/weekly stats | — (read-only) |
+| `jobcut-track` | Update an application — note, interview round, status, fields | `ingest-events` |
+| `jobcut-docs` | Save a prep/study/debrief document into an application | `ingest-documents` |
+| `jobcut-add` | Add a job from a URL (company site / Lever / Greenhouse) | `add-job` |
+| `jobcut-open` | Launch the web console from chat | — |
+| `jobcut-market` | Summarize demand vs your kit (Discovery, read-only) | — (read-only) |
+| `jobcut-salary` | Estimate a salary band for offers that disclose none | `ingest-salary` |
+| `jobcut-update` | Pull latest code, rebuild + restart the console | — |
+
+### 18.3 How Claude builds the profile, and how it drives scoring + Discovery
+
+This is the chain the whole tool rests on — **one profile, one kit, two consumers:**
+
+```text
+  jobcut-profile (interview / CV)                    profile.md  (human-readable record)
+        │  extract skills → have / partial / gap          │
+        ▼                                                  ▼
+  jobcut ingest-profile ──────────────▶  config/taxonomy.json  = your skills KIT
+                                            (per skill: status + category + regex)
+                                                  │                       │
+                             drives ◀─────────────┘                       └────▶ drives
+                                  ▼                                                 ▼
+                    SCORING  (the +20 "stack" component)              DISCOVERY (jobcut-market)
+                                                                     demand · coverage · gaps
+```
+
+1. **Skills extraction — `jobcut-profile`.** Claude interviews you (any language) or reads a
+   pasted CV and splits your skills into **have** (real strengths), **partial** (some
+   exposure), and **gap** (target roles want it; you're learning it). One
+   `jobcut ingest-profile` writes `profile.md` **and** re-derives the kit, **merging** so any
+   hand-tuned taxonomy patterns survive (see [§8](#8-profile-derived-targeting-role-agnostic)).
+   Reviewing a CV, it shows you the have/partial/gap split to correct before writing — it
+   doesn't guess silently. Updating one skill ("I learned dbt — move it to have") is the same
+   call with the new status.
+2. **Scoring uses the kit.** Both backends judge against the same profile-derived skills:
+   `rule_based` matches the kit's regex for its **+20 "stack"** component; `claude_skills`
+   (the `jobcut-score` skill) reads each job, judges it against your profile, and writes the
+   verdict back via `ingest-scores`. Same base, different judge — see
+   [§9](#9-the-scoring-rubric).
+3. **Discovery uses the same kit.** `jobcut-market` (and the Discovery page) counts market
+   demand for each kit skill and crosses it with your have/partial/gap status to compute
+   **coverage** and a **prioritized gap** list — so what you're missing, and what to learn
+   next, comes straight from the profile you built.
+
+Because scoring and Discovery share one kit, **a better profile improves both at once** — and
+nothing is hardwired to a role, so the same chain works for a nurse or a data analyst.
+
+---
+
+## 19. Glossary
 
 - **funnel** — the listings hireable for you (they pass the geo gate); the rest are
   market-intel only.
