@@ -45,15 +45,18 @@ def _isolated(tmp_path, monkeypatch):
 # --- parsing ----------------------------------------------------------------
 
 def test_parse_example_profile():
+    """The shipped example is role-NEUTRAL: every skill/role bullet is an "(add yours…)"
+    placeholder (dropped on parse), so it primes no field. Structure must still parse."""
     md = (__import__("importlib").resources.files("jobcut")
           / "templates" / "profile.example.md").read_text()
     pd = profile.parse(md)
-    assert "Senior Data Analyst" in pd.target_titles
-    assert "SQL" in pd.core_skills
-    assert "dbt" in pd.nice_skills
+    # all role/skill bullets are placeholders → dropped → no field baked in
+    assert pd.target_titles == [] and pd.core_skills == [] and pd.gap_skills == []
+    # but the field-neutral guidance lines still parse (structure intact for round-trip)
     assert pd.remote_mode and pd.dealbreakers
-    # placeholder bullets like "(add yours)" are dropped
-    assert "(add yours)" not in pd.target_titles
+    # and no data-analyst content leaked into the shipped template
+    for term in ("Data Analyst", "SQL", "dbt", "Tableau", "Power BI"):
+        assert term not in md
 
 
 def test_parse_is_tolerant_of_missing_sections():

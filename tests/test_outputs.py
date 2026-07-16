@@ -26,6 +26,9 @@ def populated(tmp_path, monkeypatch):
     config.reset_cache()
     (tmp_path / "config").mkdir()
     config.taxonomy_file().write_text(json.dumps(TAXONOMY))
+    # role-agnostic engine ships no title default — this data fixture sets its own
+    config.config_file().write_text(json.dumps(
+        {"filter": {"include_titles": r"data analyst|analyst|machine learning"}}))
 
     conn = db.connect()
     rows = {}

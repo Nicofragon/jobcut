@@ -1,11 +1,11 @@
 {
-  "_comment": "Copy to config/config.json and edit. Only the keys you override matter — anything you omit falls back to jobcut's built-in defaults. Regexes are case-insensitive (ES+EN). The 'routing' values are an EXAMPLE — set your own geography.",
+  "_comment": "Copy to config/config.json and edit. Only the keys you override matter — anything you omit falls back to jobcut's built-in defaults. Regexes are case-insensitive. NOTHING here is tied to a field: 'filter.include_titles' is left empty on purpose — it's derived from your profile's Target roles when you build your profile (onboarding, Settings → Profile, or the jobcut-profile skill), so it fits whatever job you're after (designer, PM, nurse, analyst…). The 'routing' values are an EXAMPLE geography — set your own.",
   "routing": {
     "home": "\\b(spain|espa[nñ]a|madrid|barcelona|valencia|seville|sevilla|m[aá]laga|bilbao)\\b",
     "region": "(european union|european economic area|\\beea\\b|\\bemea\\b|^europe$|^eu$)"
   },
   "filter": {
-    "include_titles": "(data analyst|data scien|analytics|business intelligence|\\bbi\\b|product analyst|business analyst|data engineer|machine learning|\\bml\\b|\\bai\\b|artificial intelligence|insight|reporting analyst|decision scien|quantitative|growth analyst|marketing analyst|crm analyst|data ?& ?ai|data and ai|datos|anal[ií]st|cient[ií]fic|ingenier[oa] de datos|inteligencia artificial|aprendizaje autom)"
+    "include_titles": ""
   },
   "scoring": {
     "backend": "rule_based",

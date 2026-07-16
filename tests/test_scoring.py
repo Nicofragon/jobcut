@@ -1,15 +1,23 @@
 """Tests for the rule_based scorer and the filter→score orchestration."""
 
+import json
+
 import pytest
 
 from jobcut import config, db
 from jobcut.scoring import get_scorer
+
+# These tests use data-analyst job fixtures, so they declare their OWN target-title
+# filter — the engine ships no field default (include_titles is derived from a profile).
+INCLUDE_TITLES = r"data analyst|analyst|machine learning"
 
 
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("JOBCUT_DATA_DIR", str(tmp_path))
     config.reset_cache()
+    (tmp_path / "config").mkdir()
+    config.config_file().write_text(json.dumps({"filter": {"include_titles": INCLUDE_TITLES}}))
     yield
     config.reset_cache()
 

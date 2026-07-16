@@ -1,15 +1,13 @@
 {
   "jobTitles": [
-    "Data Analyst",
-    "Senior Data Analyst",
-    "Business Analyst",
-    "Product Analyst"
+    "REPLACE_ME — a target job title",
+    "REPLACE_ME — another title you'd take"
   ],
-  "locations": ["Madrid"],
+  "locations": ["REPLACE_ME — your city (e.g. Madrid, Berlin, San Francisco)"],
   "workplaceType": ["office", "hybrid"],
   "employmentType": ["full-time"],
   "maxItems": 50,
   "postedLimit": "24h",
   "sortBy": "relevance",
-  "_note": "One file per saved search; the filename (without .json) is the search's source label. Input schema = the harvestapi/linkedin-job-search Apify actor. 'locations' takes plain place names (LinkedIn understands 'Madrid', 'Spain', 'San Francisco') — no geoId needed. Use 'United Kingdom' rather than 'UK'. A numeric 'geoIds' is optional precision. Copy this file to e.g. searches/barcelona.json and edit. Your real searches are git-ignored; only searches/example-*.json are tracked."
+  "_note": "One file per saved search; the filename (without .json) is the search's source label. Input schema = the harvestapi/linkedin-job-search Apify actor. The jobTitles/locations above are PLACEHOLDERS — replace them with your own (they're NOT tied to any field). 'locations' takes plain place names (LinkedIn understands 'Madrid', 'Spain', 'San Francisco') — no geoId needed. Use 'United Kingdom' rather than 'UK'. A numeric 'geoIds' is optional precision. Tip: building your profile can generate these searches for you from your Target roles. Copy this file to e.g. searches/barcelona.json and edit. Your real searches are git-ignored; only searches/example-*.json are tracked."
 }

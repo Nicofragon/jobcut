@@ -423,10 +423,10 @@ function Profile({
         />
       </Field>
       <Field label="Must-have skills" hint="Things you bring — they boost matching jobs.">
-        <TagInput values={fields.skills} onChange={(v) => set("skills", v)} placeholder="e.g. SQL, Python…" />
+        <TagInput values={fields.skills} onChange={(v) => set("skills", v)} placeholder="Skills you can do today…" />
       </Field>
       <Field label="Nice-to-haves" hint="Bonus signals that nudge a score up.">
-        <TagInput values={fields.must_haves} onChange={(v) => set("must_haves", v)} placeholder="e.g. dbt, BigQuery…" />
+        <TagInput values={fields.must_haves} onChange={(v) => set("must_haves", v)} placeholder="Skills you have some exposure to…" />
       </Field>
       <Field label="Dealbreakers" hint="Hard no's — jobs requiring these get penalized.">
         <TagInput values={fields.dealbreakers} onChange={(v) => set("dealbreakers", v)} placeholder="e.g. security clearance…" />
@@ -460,7 +460,7 @@ function Searches({
         <input value={search.name} onChange={(e) => set("name", e.target.value)} placeholder="main" className={inputCls} />
       </Field>
       <Field label="Job titles">
-        <TagInput values={search.titles} onChange={(v) => set("titles", v)} placeholder="e.g. Data Analyst — press Enter…" />
+        <TagInput values={search.titles} onChange={(v) => set("titles", v)} placeholder="e.g. your target job title — press Enter…" />
       </Field>
       <Field label="Locations">
         <TagInput values={search.locations} onChange={(v) => set("locations", v)} placeholder="e.g. European Economic Area — press Enter…" />

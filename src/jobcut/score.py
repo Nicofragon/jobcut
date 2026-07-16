@@ -104,7 +104,7 @@ def run(conn=None, progress=None) -> dict:
 
     for d in sel["discard_title"]:
         rows.append(_row(d["job_id"], d["canonical_id"], TITLE_DISCARD_SCORE,
-                         "title out of profile (not data/analytics/AI)", "discarded", today, be))
+                         "title out of profile (doesn't match your target roles)", "discarded", today, be))
 
     n = db.upsert_scores(conn, rows)
     summary = {"scored": len(results), "reposts": len(sel["reposts"]),

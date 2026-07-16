@@ -52,6 +52,18 @@ def test_bundled_config_matches_defaults():
     shipped = json.loads(tpl.read_text())
     assert shipped["scoring"]["weights"] == config.DEFAULTS["scoring"]["weights"]
     assert shipped["routing"]["home"] == config.DEFAULTS["routing"]["home"]
+    # role-agnostic: neither the default nor the shipped template bakes in a title filter
+    # (it's derived from the user's profile) — guard against a field-specific default creeping back
+    assert config.DEFAULTS["filter"]["include_titles"] == ""
+    assert shipped["filter"]["include_titles"] == ""
+
+
+def test_bundled_taxonomy_ships_empty_no_field_bias():
+    """The shipped kit is role-neutral: no skills/segments baked in (derived from the
+    profile). Guards against re-introducing a data-analyst (or any single-field) default."""
+    from importlib import resources
+    tax = json.loads((resources.files("jobcut") / "templates" / "taxonomy.example.json").read_text())
+    assert tax["skills"] == {} and tax["role_segments"] == {}
 
 
 def test_port_in_use_detects_listener():
