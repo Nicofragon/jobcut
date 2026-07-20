@@ -303,6 +303,7 @@ export type Schedule = {
   interval_days: number;
   hour: number;
   minute: number;
+  claude_score: boolean;
   platform: string;
   supported: boolean;
   installed: boolean;
@@ -315,6 +316,7 @@ export const putSchedule = (body: {
   interval_days: number;
   hour: number;
   minute: number;
+  claude_score: boolean;
 }) => api<Schedule>("/schedule", { method: "PUT", body: JSON.stringify(body) });
 
 export const draftProfile = (text: string) =>

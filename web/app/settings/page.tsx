@@ -323,6 +323,7 @@ function Automation() {
         interval_days: next.interval_days,
         hour: next.hour,
         minute: next.minute,
+        claude_score: next.claude_score,
       });
       setS(res);
       setNote(res.installed ? "Schedule saved" : "Automation turned off");
@@ -402,6 +403,23 @@ function Automation() {
               />
             </Field>
           </div>
+
+          <label className="mt-4 flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={s.claude_score}
+              onChange={(e) => upd({ claude_score: e.target.checked })}
+              className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]"
+            />
+            <span className="text-sm">
+              <span className="font-medium text-on-surface">Score new jobs with Claude</span>
+              <span className="block text-xs text-on-surface-faint">
+                After each run, a local headless Claude scores the new jobs against your profile (runs the
+                jobcut-score skill). Requires the <code className="font-mono">claude</code> CLI installed and signed in
+                on this machine.
+              </span>
+            </span>
+          </label>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button onClick={() => save(s)} disabled={busy} className={btnPrimary}>

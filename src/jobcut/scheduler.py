@@ -30,7 +30,8 @@ LABEL = "com.jobcut.daily"
 CRON_BEGIN = "# >>> jobcut daily >>>"
 CRON_END = "# <<< jobcut daily <<<"
 
-DEFAULT = {"enabled": False, "frequency": "daily", "interval_days": 2, "hour": 7, "minute": 30}
+DEFAULT = {"enabled": False, "frequency": "daily", "interval_days": 2, "hour": 7, "minute": 30,
+           "claude_score": False}
 _FREQS = ("daily", "weekdays", "every_n")
 
 
@@ -61,6 +62,7 @@ def _clean(cfg_in: dict) -> dict:
     cfg["hour"] = max(0, min(23, int(cfg["hour"])))
     cfg["minute"] = max(0, min(59, int(cfg["minute"])))
     cfg["interval_days"] = max(2, min(30, int(cfg["interval_days"])))
+    cfg["claude_score"] = bool(cfg["claude_score"])
     return cfg
 
 
@@ -68,6 +70,8 @@ def _daily_args(cfg: dict) -> list[str]:
     args = [_jobcut_bin(), "daily"]
     if cfg["frequency"] == "every_n":
         args += ["--every", str(cfg["interval_days"])]
+    if cfg.get("claude_score"):
+        args += ["--claude-score"]
     return args
 
 

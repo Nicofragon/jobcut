@@ -16,6 +16,7 @@ class ScheduleIn(BaseModel):
     interval_days: int = 2            # used when frequency == every_n
     hour: int = 7
     minute: int = 30
+    claude_score: bool = False        # after pull, score new jobs with a local headless Claude
 
 
 @router.get("")

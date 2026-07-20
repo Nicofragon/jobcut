@@ -49,6 +49,28 @@ def test_plist_weekdays_emits_five_days():
     assert p.count("<key>Weekday</key>") == 5         # Mon–Fri
 
 
+def test_claude_score_flag_off_by_default():
+    c = scheduler._clean({"enabled": 1})
+    assert c["claude_score"] is False
+    assert "--claude-score" not in scheduler.build_cron_line({"frequency": "daily"})
+    assert "--claude-score" not in scheduler.build_plist({"frequency": "daily"})
+
+
+def test_claude_score_flag_appended_when_on():
+    cfg = {"frequency": "daily", "hour": 7, "minute": 30, "claude_score": True}
+    assert scheduler._clean(cfg)["claude_score"] is True
+    assert "daily --claude-score" in scheduler.build_cron_line(cfg)
+    assert "<string>--claude-score</string>" in scheduler.build_plist(cfg)
+
+
+def test_claude_score_survives_persist_roundtrip(monkeypatch):
+    monkeypatch.setattr(scheduler, "_system", lambda: "macos")
+    monkeypatch.setattr(scheduler, "_install_macos", lambda cfg: None)
+    scheduler.set_schedule({"enabled": True, "claude_score": True})
+    assert scheduler.get()["claude_score"] is True
+    assert "--claude-score" in scheduler.get()["command"]
+
+
 def test_get_reports_platform_and_capability():
     s = scheduler.get()
     assert s["platform"] in ("macos", "linux", "windows", "other")

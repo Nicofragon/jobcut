@@ -375,6 +375,11 @@ def cmd_daily(args) -> int:
     score.run()
     surface.main()
     print("daily · pull + score + surface complete")
+    # Optional closing step: let a local headless Claude score the jobs the
+    # pipeline left unscored (claude_skills backend is ingest-first — see score.py).
+    if getattr(args, "claude_score", False):
+        from . import claude_score as claude_score_mod
+        claude_score_mod.run()
     return 0
 
 
@@ -982,6 +987,8 @@ def build_parser() -> argparse.ArgumentParser:
     pdl = sub.add_parser("daily", help="pull + score + surface in one (what the scheduler runs)")
     pdl.add_argument("--read", action="store_true", help="re-download the last run (FREE) instead of a paid scrape")
     pdl.add_argument("--every", type=int, default=0, help="only run if >= N days since the last pull (for 'every N days' schedules)")
+    pdl.add_argument("--claude-score", action="store_true",
+                     help="after pull+surface, score the new jobs with a local headless Claude (runs the jobcut-score skill)")
     pdl.set_defaults(func=cmd_daily)
 
     pm = sub.add_parser("market", help="write the market-gaps report and dashboard")
