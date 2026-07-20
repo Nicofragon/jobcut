@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import JobCard from "@/components/JobCard";
 import RunControls from "@/components/RunControls";
+import { absoluteDay, relativeDay } from "@/lib/ui";
 import { Icon } from "@/components/icons";
 import { ErrorNote, SkeletonCards } from "@/components/States";
 
@@ -131,6 +132,22 @@ export default function HomePage() {
               ? `${newCount} new today · ${funnelCount} in your funnel`
               : "Loading your matches…"}
           </p>
+          {data && (data.meta.last_pull || data.meta.last_scored) && (
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-on-surface-faint">
+              <Icon name="calendar" size={14} className="shrink-0" />
+              {data.meta.last_pull && (
+                <span title={absoluteDay(data.meta.last_pull) ?? undefined}>
+                  Jobs pulled {relativeDay(data.meta.last_pull)}
+                </span>
+              )}
+              {data.meta.last_pull && data.meta.last_scored && <span aria-hidden>·</span>}
+              {data.meta.last_scored && (
+                <span title={absoluteDay(data.meta.last_scored) ?? undefined}>
+                  scored {relativeDay(data.meta.last_scored)}
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <RunControls onDone={load} />
       </header>
