@@ -61,6 +61,35 @@ def test_surface_writes_shortlist(populated):
     assert (paths.out_dir() / "shortlist.csv").exists()
 
 
+def test_shortlist_records_carry_dates(populated):
+    conn, _ = populated
+    # keys always present so the console can render a freshness line per card
+    rows = (d := surface.shortlist_data(conn))["today"] + d["backlog"]
+    assert rows, "fixture should surface at least one scored job"
+    assert all("first_seen" in r and "posted_date" in r for r in rows)
+
+    # real values surface end-to-end (the fixture rows carry blanks; set some)
+    conn.execute("UPDATE jobs SET first_seen = ?, posted_date = ? WHERE job_id = ?",
+                 ("2026-06-16", "2026-06-10", "1"))
+    conn.commit()
+    rows2 = (d := surface.shortlist_data(conn))["today"] + d["backlog"]
+    row1 = next(r for r in rows2 if r["job_id"] == "1")
+    assert row1["first_seen"] == "2026-06-16"
+    assert row1["posted_date"] == "2026-06-10"
+
+
+def test_shortlist_meta_reports_pull_and_scored_dates(populated, tmp_path):
+    conn, _ = populated
+    meta = surface.shortlist_data(conn)["meta"]
+    assert "last_pull" in meta and "last_scored" in meta
+    assert meta["last_pull"] is None                            # no pull recorded yet
+    assert meta["last_scored"] and meta["last_scored"][:4].isdigit()
+
+    # once a pull is recorded (last_runs.json), last_pull reflects its date
+    (tmp_path / "last_runs.json").write_text(json.dumps({"date": "2026-06-16"}))
+    assert surface.shortlist_data(conn)["meta"]["last_pull"] == "2026-06-16"
+
+
 def test_market_writes_report(populated):
     conn, _ = populated
     market.main(conn)

@@ -26,12 +26,20 @@ export type ShortlistItem = {
   workplace_type: string | null;
   status: string | null;
   backend: string | null;
+  first_seen: string | null;   // when we first pulled the offer
+  posted_date: string | null;  // the offer's own publish date (from Apify)
 };
 
 export type Shortlist = {
   today: ShortlistItem[];
   backlog: ShortlistItem[];
-  meta: { db_count: number; funnel_count: number; excluded: number };
+  meta: {
+    db_count: number;
+    funnel_count: number;
+    excluded: number;
+    last_pull: string | null;    // when "Find new jobs" last ran
+    last_scored: string | null;  // most recent scoring batch
+  };
 };
 
 export type Application = {

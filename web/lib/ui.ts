@@ -49,6 +49,44 @@ export function isoToLocal(iso: string): Date {
   return new Date(needsUtc ? `${iso}Z` : iso);
 }
 
+// Build a LOCAL-midnight Date from a "YYYY-MM-DD" head, or null if the value isn't a
+// real date. `posted_date` can be junk (Apify sometimes gives non-ISO text), so callers
+// get null and skip rendering rather than showing garbage.
+function dayOnly(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const head = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(head)) return null;
+  const [y, m, d] = head.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+// A short, friendly age: "today", "yesterday", "3d ago", "2w ago", then an absolute
+// date ("Jul 18") beyond a month or for future dates. Null for blanks/unparseable.
+export function relativeDay(value: string | null | undefined): string | null {
+  const d = dayOnly(value);
+  if (!d) return null;
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const days = Math.round((start.getTime() - d.getTime()) / 86_400_000);
+  if (days < 0) return absoluteDay(value);
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return absoluteDay(value);
+}
+
+// Absolute short date for tooltips/fallback: "Jul 18" (this year) or "Jul 18, 2025".
+export function absoluteDay(value: string | null | undefined): string | null {
+  const d = dayOnly(value);
+  if (!d) return null;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, sameYear
+    ? { month: "short", day: "numeric" }
+    : { month: "short", day: "numeric", year: "numeric" });
+}
+
 export function offerLink(item: {
   linkedin_url: string | null;
   apply_url: string | null;

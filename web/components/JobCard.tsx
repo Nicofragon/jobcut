@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ShortlistItem } from "@/lib/api";
-import { offerLink, scorerLabel } from "@/lib/ui";
+import { absoluteDay, offerLink, relativeDay, scorerLabel } from "@/lib/ui";
 import ScoreRing from "./ScoreRing";
 import StatusSelect from "./StatusSelect";
 import { Icon } from "./icons";
@@ -24,6 +24,11 @@ export default function JobCard({
   const link = offerLink(item);
   const detail = `/job?id=${item.job_id}`;
   const wp = workplaceLabel(item.workplace_type);
+  const posted = relativeDay(item.posted_date);   // the offer's own publish date
+  const seen = relativeDay(item.first_seen);       // when we pulled it in
+  // Show the posting age when we have it, and always the pull ("seen") date as the
+  // reliable signal. Avoid repeating the same day twice.
+  const seenDiffers = seen && item.first_seen?.slice(0, 10) !== item.posted_date?.slice(0, 10);
 
   return (
     <article
@@ -68,6 +73,23 @@ export default function JobCard({
             </span>
           )}
         </div>
+      )}
+
+      {/* freshness: posting age (if known) + the pull ("seen") date */}
+      {(posted || seen) && (
+        <p className="mb-4 flex items-center gap-1.5 text-xs text-on-surface-faint">
+          <Icon name="calendar" size={13} className="shrink-0" />
+          {posted && (
+            <span title={absoluteDay(item.posted_date) ?? undefined}>Posted {posted}</span>
+          )}
+          {posted && seenDiffers && <span aria-hidden>·</span>}
+          {seenDiffers && (
+            <span title={absoluteDay(item.first_seen) ?? undefined}>
+              {posted ? "seen " : "Seen "}
+              {seen}
+            </span>
+          )}
+        </p>
       )}
 
       {/* why it matches */}

@@ -13,6 +13,7 @@ CSV/xlsx with columns Company, Role Title, LinkedIn URL. If unset, it's skipped.
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import re
 
@@ -161,15 +162,18 @@ def load_applied():
 
 
 # columns surfaced to JSON/CSV consumers (the API and shortlist.csv)
+# `first_seen` = when we first pulled the offer; `posted_date` = the offer's own
+# publish date (from Apify) — both drive the freshness line on each card.
 RECORD_FIELDS = ["job_id", "title", "company_name", "location", "score", "match_reasons",
                  "linkedin_url", "apply_url", "easy_apply_url", "scored_date",
-                 "workplace_type", "status", "backend"]
+                 "workplace_type", "status", "backend", "first_seen", "posted_date"]
 
 # jobs columns the shortlist actually needs (drops `description` + other heavy text);
 # the rest of a shortlist row comes from the scores table. Used by the API path only —
 # the CLI .md export (main) reads full rows for recruiter/salary fields.
 SHORTLIST_JOB_COLS = ["job_id", "title", "company_name", "location", "workplace_type",
-                      "linkedin_url", "apply_url", "easy_apply_url", "expire_at"]
+                      "linkedin_url", "apply_url", "easy_apply_url", "expire_at",
+                      "first_seen", "posted_date"]
 
 
 def _ranked_funnel(conn, applied_ids, applied_ct, today, light=False):
@@ -210,6 +214,20 @@ def _ranked_funnel(conn, applied_ids, applied_ct, today, light=False):
     return m, df, f, n_excl
 
 
+def last_pull_date() -> str | None:
+    """Date of the last Apify pull (``last_runs.json``) — i.e. when 'Find new jobs'
+    last ran. ``None`` if nothing has been pulled yet. Lets the console tell the user
+    how fresh the whole shortlist is, not just each card."""
+    p = paths.data_dir() / "last_runs.json"
+    if not p.exists():
+        return None
+    try:
+        d = json.loads(p.read_text()).get("date")
+        return str(d) if d else None
+    except Exception:
+        return None
+
+
 def _records(frame):
     """A ranked frame -> JSON-safe list of dicts (numpy/NaN scrubbed)."""
     cols = [c for c in RECORD_FIELDS if c in frame.columns]
@@ -243,7 +261,8 @@ def shortlist_data(conn, *, min_score=60, backlog_min=75, q=None, location=None,
         applied_ids = set(apps.job_id) if not apps.empty else set()
 
     m, df, f, n_excl = _ranked_funnel(conn, applied_ids, set(), today, light=True)
-    meta = {"db_count": int(len(m)), "funnel_count": 0, "excluded": int(n_excl)}
+    meta = {"db_count": int(len(m)), "funnel_count": 0, "excluded": int(n_excl),
+            "last_pull": last_pull_date(), "last_scored": None}
     if f is None or f.empty:
         return {"today": [], "backlog": [], "meta": meta}
     meta["funnel_count"] = int(df.funnel.sum())
@@ -264,6 +283,7 @@ def shortlist_data(conn, *, min_score=60, backlog_min=75, q=None, location=None,
     # BOTH lists — the control filters the whole feed, not just the fresh batch.
     # (`backlog_min` kept in the signature for API back-compat; superseded by min_score.)
     latest = sd.max() if len(sd) else today
+    meta["last_scored"] = str(latest) if (len(sd) and str(latest)[:4].isdigit()) else None
     today_top = f[(sd == latest) & (f.score >= min_score)].sort_values("score", ascending=False).head(limit)
     backlog = f[(sd < latest) & (f.score >= min_score)].sort_values("score", ascending=False).head(limit)
     return {"today": _records(today_top), "backlog": _records(backlog), "meta": meta}
