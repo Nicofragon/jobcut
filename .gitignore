@@ -71,3 +71,17 @@ CLAUDE.md
 
 # Local-only planning & strategy docs (never published)
 planning/
+
+# --- design-sync (claude.ai/design importer) -------------------------------
+# Durable, committed sync inputs live in .design-sync/ (config.json, NOTES.md,
+# conventions.md, previews/) and web/.design-sync/ (entry.tsx, stubs/, tsconfig).
+# Everything below is regenerated per run and must never be committed.
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+web/.design-sync/compiled.css
+# The real config pins YOUR claude.ai/design project UUID — keep it local.
+# Ship config.example.json instead (copy it to config.json and add projectId).
+.design-sync/config.json

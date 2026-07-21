@@ -1,0 +1,34 @@
+{
+  "//": "Copy to .design-sync/config.json (gitignored) and add your own \"projectId\" (the claude.ai/design project this repo syncs to). Everything else here is the reproducible build config for the jobcut Design System sync.",
+  "shape": "package",
+  "pkg": "web",
+  "globalName": "JobcutDs",
+  "srcDir": "components",
+  "tsconfig": ".design-sync/tsconfig.json",
+  "cssEntry": ".design-sync/compiled.css",
+  "extraFonts": ".design-sync/fonts.css",
+  "buildCmd": "bash web/.design-sync/build-css.sh",
+  "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "JobCard": { "cardMode": "column" }
+  },
+  "componentSrcMap": {
+    "JobCard": "components/JobCard.tsx",
+    "Logo": "components/Logo.tsx",
+    "Nav": "components/Nav.tsx",
+    "RunControls": "components/RunControls.tsx",
+    "ScoreRing": "components/ScoreRing.tsx",
+    "StatusSelect": "components/StatusSelect.tsx",
+    "TagInput": "components/TagInput.tsx",
+    "WorkTypeToggle": "components/WorkTypeToggle.tsx",
+    "ScoreBadge": "components/Badges.tsx",
+    "CategoryBadge": "components/Badges.tsx",
+    "Spinner": "components/States.tsx",
+    "Loading": "components/States.tsx",
+    "ErrorNote": "components/States.tsx",
+    "SkeletonCards": "components/States.tsx",
+    "SkeletonRows": "components/States.tsx",
+    "Icon": "components/icons.tsx",
+    "InfoDot": "components/InfoDot.tsx"
+  }
+}
