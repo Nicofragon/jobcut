@@ -111,9 +111,11 @@ def test_score_orchestration_end_to_end():
     conn.close()
 
 
-def test_score_stands_aside_for_claude_skills(capsys):
-    """Selecting claude_skills must not quietly rubric-score: no scorer runs, no rows land,
-    and the user is told to run their skill. This is the whole point of a non-live backend."""
+def test_score_floors_new_jobs_under_claude_skills(capsys):
+    """Under claude_skills, a bare pull would leave new jobs invisible until Claude runs.
+    So `jobcut score` lays a rule_based FLOOR on the new funnel: rows land immediately,
+    tagged honestly as `rule_based` (never as claude_skills), and the user is still told
+    to run their skill to upgrade them."""
     from jobcut import score
 
     conn = db.connect()
@@ -125,8 +127,42 @@ def test_score_stands_aside_for_claude_skills(capsys):
     config.update({"scoring": {"backend": "claude_skills"}})
 
     summary = score.run(conn)
-    assert summary["skipped"] is True
-    assert summary["rows_written"] == 0
-    assert db.read_scores(conn).empty          # nothing was scored behind the user's back
-    assert "ingest-scores" in capsys.readouterr().out
+    assert summary["floor"] is True
+    assert summary["backend"] == "claude_skills"     # the configured backend is unchanged
+    assert summary["scored"] == 1
+    assert summary["rows_written"] >= 1
+
+    sc = db.read_scores(conn)
+    assert set(sc.job_id) == {"100"}
+    # the floor is honest about its provenance — it never masquerades as Claude
+    assert sc[sc.job_id == "100"].iloc[0].backend == "rule_based"
+    assert "scoring skill" in capsys.readouterr().out
+    conn.close()
+
+
+def test_floor_never_downgrades_an_existing_claude_score():
+    """The floor is incremental — a job Claude already scored keeps its claude_skills
+    score and reason; re-running `jobcut score` under claude_skills must not clobber it
+    with the rubric."""
+    from jobcut import score
+
+    conn = db.connect()
+    rows = {"100": {c: "" for c in db.JOB_COLS}}
+    rows["100"].update(job_id="100", title="Data Analyst", company_name="Acme", location="Madrid, Spain",
+                       workplace_type="hybrid", description="SQL Python",
+                       first_seen="2026-01-01", last_seen="2026-01-01")
+    db.upsert_jobs(conn, rows, "2026-01-01")
+    config.update({"scoring": {"backend": "claude_skills"}})
+
+    # Claude scored it first (as `jobcut ingest-scores` would): 95, tagged claude_skills.
+    db.upsert_scores(conn, [{"job_id": "100", "canonical_id": "", "match_score": 95,
+                             "match_reasons": "great fit", "status": "scored",
+                             "scored_date": "2026-01-02", "backend": "claude_skills"}])
+
+    summary = score.run(conn)
+    assert summary["scored"] == 0                     # nothing new to floor
+    row = db.read_scores(conn)
+    row = row[row.job_id == "100"].iloc[0]
+    assert int(row.match_score) == 95                 # untouched
+    assert row.backend == "claude_skills"             # provenance preserved, not downgraded
     conn.close()
