@@ -274,9 +274,11 @@ def cmd_unscored(args) -> int:
     if raw_ids and raw_ids.strip():
         ids = [i for i in raw_ids.replace(",", " ").split() if i]
     include_scored = getattr(args, "include_scored", False)
+    needs_backend = getattr(args, "needs_backend", None)
     conn = db.connect()
     try:
-        rows = _filter.unscored(conn, include_scored=include_scored, ids=ids)
+        rows = _filter.unscored(conn, include_scored=include_scored, ids=ids,
+                                needs_backend=needs_backend)
     finally:
         conn.close()
     if getattr(args, "json", False):
@@ -284,6 +286,9 @@ def cmd_unscored(args) -> int:
         print(json.dumps(rows, ensure_ascii=False, indent=1))
     elif ids:
         print(f"unscored · {len(rows)} job(s) for the given ids (use --json for the data)")
+    elif needs_backend:
+        print(f"unscored · {len(rows)} hireable job(s) not yet scored by {needs_backend} "
+              f"(rule_based floor counts as unscored; use --json for the data)")
     elif include_scored:
         print(f"unscored · {len(rows)} hireable funnel job(s) incl. already-scored (use --json for the data)")
     else:
@@ -978,6 +983,9 @@ def build_parser() -> argparse.ArgumentParser:
     pu.add_argument("--json", action="store_true", help="print the jobs (with descriptions) as JSON to stdout")
     pu.add_argument("--include-scored", action="store_true",
                     help="also include already-scored funnel jobs (for re-scoring with full descriptions)")
+    pu.add_argument("--needs-backend", metavar="BACKEND", default=None,
+                    help="funnel jobs NOT yet scored by this backend (e.g. claude_skills) — includes "
+                         "rule_based-floored jobs the default would hide; use for Claude/Cowork scoring")
     pu.add_argument("--ids", metavar="ID[,ID...]",
                     help="only these job_ids (with full descriptions), regardless of scored state — targeted re-score")
     pu.set_defaults(func=cmd_unscored)

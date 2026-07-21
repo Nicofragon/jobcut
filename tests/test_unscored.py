@@ -93,6 +93,61 @@ def test_unscored_ids_returns_exactly_those_with_description():
     conn.close()
 
 
+def test_unscored_needs_backend_surfaces_floored_but_not_claude():
+    """The rule_based floor makes a new job 'scored', so a plain `unscored` hides it.
+    `needs_backend="claude_skills"` must resurface floored + never-scored jobs (they still
+    need Claude) while leaving jobs Claude already scored alone."""
+    conn = db.connect()
+    jobs = {
+        "10": _job("10", title="Data Analyst", company_name="A", location="Madrid, Spain",
+                   workplace_type="remote", description="floored by rule_based"),
+        "11": _job("11", title="Data Analyst", company_name="B", location="Madrid, Spain",
+                   workplace_type="remote", description="already claude-scored"),
+        "12": _job("12", title="Data Analyst", company_name="C", location="Madrid, Spain",
+                   workplace_type="remote", description="never scored"),
+    }
+    db.upsert_jobs(conn, jobs, "2026-01-01")
+    db.upsert_scores(conn, [
+        {"job_id": "10", "canonical_id": "", "match_score": 55, "match_reasons": "floor",
+         "status": "scored", "scored_date": "2026-01-02", "backend": "rule_based"},
+        {"job_id": "11", "canonical_id": "", "match_score": 90, "match_reasons": "claude",
+         "status": "scored", "scored_date": "2026-01-02", "backend": "claude_skills"},
+    ])
+    # plain unscored: 10 (rule_based) and 11 (claude) both count as scored -> only 12
+    assert {r["job_id"] for r in _filter.unscored(conn)} == {"12"}
+    # needs claude: floored(10) + never-scored(12); claude-scored(11) excluded
+    got = _filter.unscored(conn, needs_backend="claude_skills")
+    assert {r["job_id"] for r in got} == {"10", "12"}
+    assert {r["job_id"]: r for r in got}["10"]["description"] == "floored by rule_based"
+    conn.close()
+
+
+def test_unscored_cli_needs_backend():
+    conn = db.connect()
+    db.upsert_jobs(conn, {"20": _job("20", title="Data Analyst", company_name="A",
+                                     location="Madrid, Spain", workplace_type="remote",
+                                     description="floored")}, "2026-01-01")
+    db.upsert_scores(conn, [{"job_id": "20", "canonical_id": "", "match_score": 50,
+                             "match_reasons": "floor", "status": "scored",
+                             "scored_date": "2026-01-02", "backend": "rule_based"}])
+    conn.close()
+    from jobcut.cli import main
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["unscored", "--needs-backend", "claude_skills", "--json"])
+    assert rc == 0
+    out = json.loads(buf.getvalue())
+    assert {r["job_id"] for r in out} == {"20"}      # rule_based floor still needs Claude
+    # a plain unscored would hide it
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["unscored", "--json"])
+    assert json.loads(buf.getvalue()) == []
+
+
 def test_unscored_cli_include_scored_and_ids():
     conn = db.connect()
     _seed(conn)

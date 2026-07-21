@@ -4,9 +4,11 @@ description: >-
   Score jobcut job listings against the user's profile and write the results
   straight into the local jobcut database — fully automatic, no manual JSON.
   Use when the user says "score my jobs", "re-score with Claude", or
-  "update the jobcut scores". Reads jobs needing a
-  score via `jobcut unscored`/`surface`, judges each against profile.md, and
-  writes them back via `jobcut ingest-scores` (tagged backend=claude_skills).
+  "update the jobcut scores" — or as an unattended scheduled task after the daily
+  pull. Reads jobs still needing a Claude score via
+  `jobcut unscored --needs-backend claude_skills` (this includes new jobs the
+  rule_based floor already scored), judges each against profile.md, and writes
+  them back via `jobcut ingest-scores` (tagged backend=claude_skills).
 ---
 
 # jobcut-score
@@ -17,9 +19,18 @@ scores **directly back** — all through the `jobcut` CLI. The user does nothing
 beyond asking.
 
 **CLI-only.** Never write SQL or edit `jobcut.db` directly. The CLI is the single
-schema authority: reads for scoring go through `jobcut unscored --json` (it returns
-the **full** `description`), the write goes through `jobcut ingest-scores`. This
-keeps the DB valid and is just as direct.
+schema authority: reads for scoring go through `jobcut unscored` (it returns the
+**full** `description`), the write goes through `jobcut ingest-scores`. This keeps
+the DB valid and is just as direct.
+
+**The rule_based floor is not a Claude score.** After a pull, jobcut lays a
+provisional `rule_based` score on new jobs so they're visible immediately — but they
+still need *you*. A plain `jobcut unscored` treats any score as "done" and would
+**hide** those floored jobs, so this skill's default selection is
+`jobcut unscored --needs-backend claude_skills`: the funnel minus what's *already
+scored by claude_skills*, i.e. everything still waiting for a Claude score (floored
++ genuinely unscored). Your `ingest-scores` write then upgrades each from
+`rule_based` to `claude_skills`, and a job Claude already scored is never re-touched.
 
 **Score against the full `description`, always.** Every score must be based on the
 complete job description, never the title, metadata, or a truncated snippet — titles
@@ -42,14 +53,17 @@ for scoring; `surface` is only for the final report in step 6.
 
 ## Steps
 
-1. **Get the jobs to score.** All three paths use `unscored`, so you always get the
+1. **Get the jobs to score.** All paths use `unscored`, so you always get the
    **full `description`** (ingest upserts by `job_id`, so re-ingesting overwrites a
    score):
-   - Default (incremental — new/unscored jobs only):
+   - **Default (incremental — everything still needing a Claude score):**
      ```
-     jobcut unscored --json > tmp/to_score.json
+     jobcut unscored --needs-backend claude_skills --json > tmp/to_score.json
      ```
-     Returns hireable jobs without a score yet, each with its `description`.
+     Returns hireable jobs not yet scored by `claude_skills` — **including new jobs the
+     rule_based floor already scored** (a plain `jobcut unscored` would wrongly report
+     "nothing to score" once the floor has run). This is the right default for both
+     manual runs and the scheduled post-pull task.
    - Re-score everything ("re-score all my jobs"): the whole funnel, including
      already-scored rows:
      ```
@@ -62,7 +76,8 @@ for scoring; `surface` is only for the final report in step 6.
      ```
    - Do **not** use `jobcut surface --json` here — it drops `description`; it's only
      for the final report (step 6).
-   - If the list is empty, tell the user there's nothing to score and stop.
+   - If the list is empty, there's genuinely nothing waiting for a Claude score —
+     say so (or, in an unattended run, log one line like "nada para puntuar") and stop.
 
 2. **Read the profile**: read `profile.md` from the data dir. Note target roles,
    seniority, must-haves, dealbreakers. **The profile and the postings may be in different
@@ -122,10 +137,11 @@ for scoring; `surface` is only for the final report in step 6.
 
 ## Notes
 
-- Read-only commands: `jobcut unscored --json` (with `--include-scored` for a full
-  re-score, or `--ids <id1,id2>` for a targeted re-score — both return full
-  descriptions) and `jobcut surface --json` (report view, no descriptions). The only
-  writer is `jobcut ingest-scores`. No raw SQL, ever.
+- Read-only commands: `jobcut unscored --json` (default select is
+  `--needs-backend claude_skills` — everything still awaiting a Claude score, floored
+  jobs included; `--include-scored` for a full re-score; `--ids <id1,id2>` for a
+  targeted re-score — all return full descriptions) and `jobcut surface --json` (report
+  view, no descriptions). The only writer is `jobcut ingest-scores`. No raw SQL, ever.
 - **`match_reasons` is the *scoring rationale* — yours alone.** It explains *why a job
   scored what it did* ("BI Analyst +25; Madrid hybrid +15; …") and is written **only**
   by this skill via `ingest-scores`. It is **not** a place to record notes, reminders,

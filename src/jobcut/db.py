@@ -321,9 +321,17 @@ def upsert_scores(conn: sqlite3.Connection, rows: list[dict]) -> int:
     return len(rows)
 
 
-def scored_ids(conn: sqlite3.Connection) -> set[str]:
-    """job_ids that already have a score (for incremental filtering)."""
-    return {r["job_id"] for r in conn.execute("SELECT job_id FROM scores").fetchall()}
+def scored_ids(conn: sqlite3.Connection, backend: str | None = None) -> set[str]:
+    """job_ids that already have a score (for incremental filtering).
+
+    ``backend`` narrows to rows produced by that scorer (e.g. ``claude_skills``) — used to
+    find jobs that still need scoring *by a specific backend*: a rule_based-floored job is
+    "scored" for the plain query but NOT scored by ``claude_skills``.
+    """
+    if backend is None:
+        return {r["job_id"] for r in conn.execute("SELECT job_id FROM scores").fetchall()}
+    return {r["job_id"] for r in
+            conn.execute("SELECT job_id FROM scores WHERE backend = ?", (backend,)).fetchall()}
 
 
 def upsert_salary_estimates(conn: sqlite3.Connection, rows: list[dict]) -> int:
