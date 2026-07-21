@@ -90,13 +90,14 @@ def shortlist_skill_gaps(conn, *, min_score: int = 60, limit: int = 8) -> dict:
     df["key"] = df.canonical_id.astype(str).str.strip().replace("", pd.NA).fillna(df.job_id)
     df = df.sort_values("score", ascending=False).drop_duplicates("key")
 
-    match = market.skill_matcher(tax)
-    counts: dict[str, int] = {}
-    for text in (df.title.astype(str) + " " + df.description.astype(str)):
-        for m in match(text)["missing"]:
-            if m["close_via"] == "skip":            # consistency with market-wide gaps
-                continue
-            counts[m["skill"]] = counts.get(m["skill"], 0) + 1
+    # Same "missing gap" definition as skill_matcher (status == "gap"), minus close_via=="skip"
+    # for consistency with the market-wide gaps — but vectorized: one regex pass per gap skill
+    # over the shortlist text instead of a Python loop over every offer × every skill.
+    text = (df.title.astype(str) + " " + df.description.astype(str))
+    gap_skills = {k: v for k, v in tax["skills"].items()
+                  if v.get("status") == "gap" and v.get("close_via") != "skip"}
+    counts = {k: c for k, m in market._skill_hitmasks(text, gap_skills).items()
+              if (c := int(m.sum())) > 0}
     n = int(len(df))
     skills = tax["skills"]
     gaps = sorted(counts.items(), key=lambda kv: -kv[1])[:limit]

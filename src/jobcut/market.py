@@ -44,6 +44,25 @@ def skill_matcher(taxonomy):
     return match
 
 
+def _skill_hitmasks(text, tax_skills: dict) -> dict:
+    """For each taxonomy skill, a boolean Series over `text` (one vectorized regex pass).
+
+    Each skill's patterns are OR'd into a single alternation and matched with pandas'
+    C-level ``str.contains`` instead of a Python per-row ``any(p.search(...))`` loop —
+    the difference between ~16 s and <1 s over a few thousand descriptions. A skill with
+    no patterns maps to all-False (matching the old ``any([]) is False`` semantics).
+    """
+    out = {}
+    for name, spec in tax_skills.items():
+        pats = spec.get("patterns", [])
+        if pats:
+            combined = re.compile("|".join(f"(?:{p})" for p in pats), re.I)
+            out[name] = text.str.contains(combined, na=False)
+        else:
+            out[name] = pd.Series(False, index=text.index)
+    return out
+
+
 def _signals(rel) -> dict:
     """Freshness (posting velocity) over the relevant market. Read-only, jobs-only.
 
@@ -91,16 +110,16 @@ def compute(conn) -> dict | None:
     R = len(rel)
 
     seg_keys = list(segments.keys())
+    seg_sizes = rel.segment.value_counts()          # relevant offers per segment (once)
+    hitmasks = _skill_hitmasks(rel.text, tax["skills"])
     skills = {}
     for name, spec in tax["skills"].items():
-        pats = [re.compile(p, re.I) for p in spec["patterns"]]
-        def hit(r, pats=pats):
-            return any(p.search(r) for p in pats)
-        n = int(rel.text.map(hit).sum())
-        seg_pct = {}
-        for seg in seg_keys:
-            sj = rel[rel.segment == seg]
-            seg_pct[seg] = round(100 * sj.text.map(hit).sum() / len(sj)) if len(sj) else 0
+        hitmask = hitmasks[name]                     # one vectorized regex pass, reused for by-seg
+        n = int(hitmask.sum())
+        seg_counts = hitmask.groupby(rel.segment).sum()
+        seg_pct = {seg: (round(100 * int(seg_counts.get(seg, 0)) / int(seg_sizes.get(seg, 0)))
+                         if int(seg_sizes.get(seg, 0)) else 0)
+                   for seg in seg_keys}
         skills[name] = {"cat": spec["cat"], "status": spec["status"], "close_via": spec.get("close_via", ""),
                         "n": n, "pct": round(100 * n / R) if R else 0, "by_seg": seg_pct}
 
