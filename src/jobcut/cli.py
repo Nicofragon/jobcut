@@ -374,6 +374,13 @@ def cmd_daily(args) -> int:
     pull.main(["--read"] if args.read else [])
     score.run()
     surface.main()
+    # Warm the Discovery cache so the first console load after the daily run is instant
+    # (the market payload is seconds to compute; better to pay it here than on the user).
+    try:
+        from .api.routers import market as market_router
+        market_router.warm()
+    except Exception as e:
+        print(f"daily · warn: could not warm Discovery cache ({e})")
     print("daily · pull + score + surface complete")
     return 0
 

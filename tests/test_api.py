@@ -30,6 +30,10 @@ def client(tmp_path, monkeypatch):
         {"filter": {"include_titles": r"data analyst|analyst|machine learning"}}))
     (tmp_path / "searches").mkdir()
 
+    # the Discovery cache is a module global — clear it so a prior test's data can't leak
+    from jobcut.api.routers import market as _mkt
+    _mkt._CACHE.clear()
+
     conn = db.connect()
     rows = {}
     for jid, title, loc, wp in [
@@ -486,6 +490,50 @@ def test_market(client):
     assert "freshness" in refreshed
     assert isinstance(refreshed["gaps"], list)
     assert all(isinstance(g, dict) for g in refreshed["gaps"])
+
+
+def test_market_payload_is_cached_and_invalidates(client, tmp_path):
+    """The Discovery payload is expensive, so it's cached by a DB/taxonomy signature:
+    a repeat GET is served from cache, and any data change transparently recomputes."""
+    from jobcut.api.routers import market as mr
+    mr._CACHE.clear()
+
+    body1 = client.get("/api/market").json()
+    assert body1["total"] == 3
+    # cache populated in-process AND on disk (the disk copy is what the daily run warms)
+    assert mr._CACHE.get("payload") is not None
+    assert mr._cache_path().exists()
+    # a repeat GET returns the identical payload (served from cache)
+    assert client.get("/api/market").json() == body1
+
+    # add a job → signature changes → the cache must invalidate and recompute
+    conn = db.connect()
+    r = {c: "" for c in db.JOB_COLS}
+    r.update(job_id="9", title="Data Analyst", company_name="Beta", company_size="50",
+             location="Madrid, Spain", workplace_type="remote", posted_date="2026-06-11",
+             linkedin_url="https://www.linkedin.com/jobs/view/9",
+             description="SQL and Python for analytics.")
+    db.upsert_jobs(conn, {"9": r}, "2026-06-17")
+    score.run(conn)
+    conn.close()
+
+    body2 = client.get("/api/market").json()
+    assert body2["total"] == 4          # recomputed, not the stale cached 3
+
+
+def test_market_warm_writes_disk_cache(client):
+    """`warm()` (called by the daily pipeline) precomputes + persists the disk cache so the
+    first console load after a pull/score is instant instead of multi-second."""
+    from jobcut.api.routers import market as mr
+    mr._CACHE.clear()
+    if mr._cache_path().exists():
+        mr._cache_path().unlink()
+
+    payload = mr.warm()
+    assert mr._cache_path().exists()
+    disk = json.loads(mr._cache_path().read_text())
+    assert disk["payload"]["total"] == payload["total"] == 3
+    assert disk["sig"] == mr._CACHE["sig"]
 
 
 def test_export(client):
