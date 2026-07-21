@@ -27,7 +27,7 @@ UNSCORED_FIELDS = ["job_id", "title", "company_name", "company_size",
 
 
 def unscored(conn, include_scored: bool = False,
-             ids: list[str] | None = None) -> list[dict]:
+             ids: list[str] | None = None, needs_backend: str | None = None) -> list[dict]:
     """Jobs to score, each with its **full** ``description`` (never truncated).
 
     Read-only. Lets an external scorer (a Claude/Cowork skill) read the job text and
@@ -35,8 +35,11 @@ def unscored(conn, include_scored: bool = False,
     pre-filter (the scorer judges relevance) and no repost collapse. Returns a list
     of plain-str dicts.
 
-    Three modes feed the three scoring paths (always with full descriptions):
+    Four modes feed the scoring paths (always with full descriptions):
       - default: geo funnel **minus** anything already scored (new jobs — incremental).
+      - ``needs_backend="claude_skills"``: geo funnel minus jobs already scored *by that
+        backend* — i.e. jobs still needing Claude, INCLUDING ones the rule_based floor
+        already scored (they'd be hidden by the default, which treats any score as done).
       - ``include_scored=True``: the whole geo funnel, including already-scored rows
         (re-score everything).
       - ``ids=[...]``: exactly those ``job_id``s, regardless of funnel or scored state
@@ -50,7 +53,11 @@ def unscored(conn, include_scored: bool = False,
         df = df[df.job_id.astype(str).isin(wanted)]
     else:
         df = df[funnel_series(df.location, df.workplace_type)]
-        if not include_scored:
+        if needs_backend is not None:
+            # jobs still lacking a score from THIS backend (rule_based floor counts as unscored)
+            done = db.scored_ids(conn, backend=needs_backend)
+            df = df[~df.job_id.astype(str).isin(done)]
+        elif not include_scored:
             already = db.scored_ids(conn)
             df = df[~df.job_id.astype(str).isin(already)]
     cols = [c for c in UNSCORED_FIELDS if c in df.columns]
