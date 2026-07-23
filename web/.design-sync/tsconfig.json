@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["./*"],
+      "next/link": ["./.design-sync/stubs/next-link.tsx"],
+      "next/navigation": ["./.design-sync/stubs/next-navigation.ts"]
+    }
+  }
+}

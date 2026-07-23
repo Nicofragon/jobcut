@@ -64,7 +64,7 @@ def _compute_payload(conn: sqlite3.Connection) -> dict:
     if data is None:
         return {"total": 0, "relevant": 0, "segments": {}, "seg_keys": [],
                 "coverage": {"pct": 0, "by_segment": {}}, "top_demand": [], "gaps": [],
-                "salary_pct": 0, "score_distribution": dist,
+                "salary_pct": 0, "salary_by_segment": {}, "score_distribution": dist,
                 "freshness": {"n": 0, "median_age_days": 0, "weekly": []},
                 "shortlist_gaps": shortlist_gaps, "empty": True}
     data["score_distribution"] = dist

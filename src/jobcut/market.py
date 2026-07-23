@@ -17,7 +17,7 @@ import datetime
 
 import pandas as pd
 
-from . import config, db, paths
+from . import config, db, paths, salaryparse
 
 
 def skill_matcher(taxonomy):
@@ -127,8 +127,35 @@ def compute(conn) -> dict | None:
 
     def _hasval(x):
         return str(x).strip().lower() not in ("", "nan", "none", "nat")
-    sal = df[df.salary_min.map(_hasval) | df.salary_text.map(_hasval)]
-    salary = {"n": len(sal), "pct": round(100 * len(sal) / total) if total else 0}
+
+    # Disclosure = the employer published pay somewhere. Structured fields are the 3% LinkedIn
+    # exposes; re-reading the description body finds the rest (raises the headline to ~8.5%).
+    desc_phrase = df.description.map(salaryparse.salary_text_from_description)
+    disclosed = df.salary_min.map(_hasval) | df.salary_text.map(_hasval) | desc_phrase.notna()
+    salary = {"n": int(disclosed.sum()),
+              "pct": round(100 * int(disclosed.sum()) / total) if total else 0}
+
+    # Per-role estimated range: normalize every disclosed figure to EUR/year gross (structured
+    # → salary_text → description body), then summarize each target segment. Robust stats
+    # (p25/median/p75 over the band midpoints) so a stray outlier can't skew a thin bucket; n is
+    # always surfaced so the UI can flag small samples.
+    bands = df.apply(lambda r: salaryparse.job_annual_band(
+        r["salary_min"], r["salary_max"], r["salary_text"], r["description"]), axis=1)
+    salary_by_segment = {}
+    for seg in seg_keys:
+        sub = bands[(df.segment == seg) & bands.notna()]
+        if sub.empty:
+            salary_by_segment[seg] = {"n": 0}
+            continue
+        mids = sub.map(lambda b: (b[0] + b[1]) / 2)
+        salary_by_segment[seg] = {
+            "n": int(len(sub)),
+            "p25": int(round(mids.quantile(0.25))),
+            "median": int(round(mids.median())),
+            "p75": int(round(mids.quantile(0.75))),
+            "min": int(sub.map(lambda b: b[0]).min()),
+            "max": int(sub.map(lambda b: b[1]).max()),
+        }
 
     gaps = sorted([{"skill": k, **v} for k, v in skills.items()
                    if v["status"] in ("gap", "partial") and v["close_via"] != "skip"],
@@ -136,8 +163,8 @@ def compute(conn) -> dict | None:
     top = sorted(skills.items(), key=lambda kv: -kv[1]["pct"])[:18]
 
     return {"total": total, "R": R, "seg_keys": seg_keys, "skills": skills,
-            "segcounts": segcounts, "salary": salary, "gaps": gaps, "top": top,
-            **_signals(rel)}
+            "segcounts": segcounts, "salary": salary, "salary_by_segment": salary_by_segment,
+            "gaps": gaps, "top": top, **_signals(rel)}
 
 
 # status → how much of the demand it "covers" (have = full, partial = half, gap = none).
@@ -208,6 +235,7 @@ def summary(conn) -> dict | None:
     return {
         "total": c["total"], "relevant": c["R"], "segments": c["segcounts"],
         "seg_keys": c["seg_keys"], "salary_pct": c["salary"]["pct"],
+        "salary_by_segment": c["salary_by_segment"],
         "coverage": _coverage(skills, c["seg_keys"]),
         "top_demand": [enrich(k, v) for k, v in c["top"][:10]],
         "gaps": [{"skill": g["skill"], "pct": g["pct"], "status": g["status"],

@@ -428,6 +428,15 @@ export type Freshness = { n: number; median_age_days: number; weekly: WeeklyInfl
 // Gap skills the offers you'd actually apply to (score ≥ floor) ask for most.
 export type ShortlistGap = { skill: string; n: number; pct: number; close_via: string; cat: string };
 export type ShortlistGaps = { n: number; gaps: ShortlistGap[] };
+// A per-role estimated salary band (EUR/year gross). Present keys imply n > 0.
+export type SalaryBand = {
+  n: number;
+  p25?: number;
+  median?: number;
+  p75?: number;
+  min?: number;
+  max?: number;
+};
 export type Market = {
   total: number;
   relevant: number;
@@ -438,6 +447,9 @@ export type Market = {
   top_demand: SkillDemand[];
   gaps: SkillGap[];
   salary_pct: number;
+  // Estimated pay per role family (EUR/year gross), from disclosed offers. Thin buckets keep
+  // their small `n` so the UI can flag them; segments with no disclosed pay are `{ n: 0 }`.
+  salary_by_segment: Record<string, SalaryBand>;
   score_distribution: ScoreDistribution;
   freshness: Freshness;
   shortlist_gaps: ShortlistGaps;
