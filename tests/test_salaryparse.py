@@ -14,6 +14,12 @@ from jobcut.salaryparse import salary_text_from_description as f
      "We offer a pay range of $90,000-$120,000 USD"),
     # picks out the salary sentence from surrounding prose (and keeps "30.000" intact)
     ("Trabajamos de 9 a 18. Salario: 30.000€ brutos. Otras cosas.", "Salario: 30.000€ brutos"),
+    # newer keywords: "rango salarial" (not just "banda"), and "brutos anuales" as its own signal
+    ("El rango salarial es 40.000-50.000€", "El rango salarial es 40.000-50.000€"),
+    ("30.000 - 40.000 € brutos anuales", "30.000 - 40.000 € brutos anuales"),
+    # glued-onto-previous-word salary line is still isolated (scraper drops the space)
+    ("Contrato indefinido en la posiciónSueldo: 30.000€ brutos anuales.",
+     "Sueldo: 30.000€ brutos anuales"),
 ])
 def test_extracts(text, expected):
     assert f(text) == expected
@@ -40,6 +46,10 @@ def test_no_false_positive(text):
     ("Salario 30.000€ brutos", (30000, 30000)),                            # single annual figure
     ("Pay range 40k-50k EUR", (40000, 50000)),                             # k on both bounds
     ("Sueldo de 60 mil euros anuales", (60000, 60000)),                    # "mil"
+    ("Salary range €3.8K-€5.2K gross", (45600, 62400)),                    # decimal-k, monthly-sized → ×12
+    ("Banda salarial: 43.000 a 45.000 € bruto/año", (43000, 45000)),       # "bruto/año"
+    ("Salario entre 9.700 y 12.000 € al año", (9700, 12000)),              # straddles 12k → one decision, no 116400
+    ("el rango salarial es 46k-51k euros al año", (46000, 51000)),         # "rango salarial"
 ])
 def test_annual_eur_band(phrase, expected):
     assert annual_eur_band(phrase) == expected
@@ -52,9 +62,20 @@ def test_annual_eur_band(phrase, expected):
     "Rate: 25 €/hora",                        # hourly → dropped
     "Salario competitivo según valía",        # no figure
     "Con 5 años de experiencia y 3 idiomas",  # bare counts, not pay
+    "Salary €8,000 to €40,000 gross/year",    # implausibly wide (5×) → two unrelated figures
 ])
 def test_annual_eur_band_none(phrase):
     assert annual_eur_band(phrase) is None
+
+
+@pytest.mark.parametrize("text", [
+    "You'll get €1K (or equivalent) per year to spend on courses",   # learning budget, not pay
+    "reimburses up to €600 per year for extras like vision aids",    # a benefit
+    "with $300+ billion in assets under management",                 # AUM
+])
+def test_benefit_lines_are_not_salary(text):
+    # widening the keyword set must not start banking perk/benefit figures as salary
+    assert f(text) is None
 
 
 def test_job_annual_band_prefers_structured():

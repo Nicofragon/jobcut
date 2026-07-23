@@ -16,12 +16,17 @@ from __future__ import annotations
 
 import re
 
-# A salary keyword (EN + ES). "retribución/remuneración/compensación" included, but a
-# figure must also be present (below), so "Retribución Flexible: Seguro Médico…" (no
-# amount) is not matched.
+# A salary keyword (EN + ES + a little FR/IT — the market spans them). A figure must also be
+# present (below), so "Retribución Flexible: Seguro Médico…" (no amount) is not matched. These
+# are all *strong* pay terms: deliberately NOT bare "annual"/"per year"/"range", which attach to
+# benefit lines ("€1K per year for courses") and would bank perks as salary.
 _SALARY_KW = re.compile(
     r"\b(salary|salaries|salario|sueldo|retribuci[oó]n|remuneraci[oó]n|"
-    r"compensaci[oó]n|paquete\s+salarial|banda\s+salarial|pay\s+range|compensation)\b",
+    r"compensaci[oó]n|compensation|paquete\s+salarial|banda\s+salarial|"
+    r"rango\s+salarial|pay\s+range|salary\s+range|total\s+cash|"          # EN/ES ranges
+    r"salaire|retribuzione|RAL|"                                          # FR/IT terms
+    r"brut[oa]s?\s+anual(?:es)?|brut[oa]s?\s*/\s*a[nñ]o|brut\s+annuel|"   # "gross annual" as a signal
+    r"lorda\s+annua|annua\s+lorda)\b",
     re.I,
 )
 
@@ -38,17 +43,27 @@ _MAX_SEG = 200   # ignore very long segments (paragraphs) — a salary line is s
 _OUT_CAP = 140   # cap the returned phrase
 
 
+def _segments(text: str):
+    """Yield short candidate segments from a description body.
+
+    Scraped descriptions often glue a salary line onto the previous sentence with no space
+    ("…en la posiciónSalario 30.000€…") or run several clauses together past any period, so a
+    naive sentence split never isolates the pay line. We first insert a break at lower→Upper
+    word joins, then split on newlines/semicolons, commas *followed by space* (never a "45,000"
+    thousands comma), and sentence-ending periods (never a "45.000" thousands period)."""
+    t = re.sub(r"(?<=[a-zñáéíóú])(?=[A-ZÁÉÍÓÚ])", ". ", str(text))
+    for seg in re.split(r"[\n;]+|,(?=\s)|\.(?=\s|$)", t):
+        yield seg.strip()
+
+
 def salary_text_from_description(text: str | None) -> str | None:
     """Return the disclosed-salary phrase found in `text`, or None.
 
-    Scans sentence/line segments; returns the first short segment that names a salary
-    AND carries a monetary figure, whitespace-collapsed and capped."""
+    Returns the first short segment that names a salary AND carries a monetary figure,
+    whitespace-collapsed and capped."""
     if not text:
         return None
-    # Split on newlines/semicolons and sentence-ending periods, but NOT on a period
-    # between digits (so European thousands like "45.000" stay intact).
-    for seg in re.split(r"[\n;]+|\.(?=\s|$)", str(text)):
-        seg = seg.strip()
+    for seg in _segments(text):
         if not seg or len(seg) > _MAX_SEG:
             continue
         if not _MONEY.search(seg) or not _SALARY_KW.search(seg):
@@ -78,7 +93,7 @@ _HOURLY = re.compile(r"/\s*h(?:ora|our|r)?\b|\bper\s+hour\b|\bhourly\b|\bpor\s+h
 # suffix, or a thousands separator — so bare counts ("20% variable", "5 años") are ignored.
 _AMOUNT = re.compile(
     r"([€$£]|\bEUR\b|\bUSD\b|\bGBP\b)?\s?"          # 1: leading currency (optional)
-    r"(\d{1,3}(?:[.,]\d{3})+|\d{2,6}|\d{1,3})"      # 2: number
+    r"(\d{1,3}(?:[.,]\d{3})+|\d{1,3}[.,]\d{1,2}|\d{2,6}|\d{1,3})"  # 2: number (incl. "3.8" for 3.8k)
     r"\s?(k|mil)?"                                  # 3: k/mil (optional)
     r"\s?([€$£]|\bEUR\b|\bUSD\b|\bGBP\b)?",         # 4: trailing currency (optional)
     re.I,
@@ -98,15 +113,21 @@ def _to_number(digits: str, suffix: str | None) -> float | None:
     return val
 
 
-def _annualize(v: float, monthly: bool) -> float | None:
-    """A raw magnitude → EUR/year, or None when it can't be trusted as pay."""
-    if monthly:
-        return v * 12 if v < 20000 else v      # guard a mislabelled annual figure
-    if v >= 12000:
-        return v                                # already annual-sized
-    if v >= 800:
-        return v * 12                           # unlabelled but monthly-sized
-    return None                                 # too small — hourly/daily/junk
+# A figure at/above this, with no explicit monthly marker, reads as an annual salary; below it,
+# as a monthly one (no EUR full-time annual salary sits under it, monthly ones routinely do).
+_MONTHLY_MAX = 6000
+
+
+def _annualized_band(vals: list[float], has_monthly_word: bool) -> tuple[int, int] | None:
+    """A set of raw EUR magnitudes → one (min, max) annual band, deciding monthly-vs-annual ONCE
+    for the whole set. Per-value inference would mis-scale a min/max that straddles the threshold
+    (e.g. 9700–12000 → 116400–12000). Monthly when an explicit marker is present or the largest
+    figure is monthly-sized; then every figure is scaled the same way."""
+    if not vals:
+        return None
+    top = max(vals)
+    factor = 12 if (has_monthly_word or top < _MONTHLY_MAX) else 1
+    return _clamp_band(min(vals) * factor, top * factor)
 
 
 def _amounts(text: str) -> list[float]:
@@ -127,8 +148,12 @@ def _amounts(text: str) -> list[float]:
 
 
 def _clamp_band(lo: float, hi: float) -> tuple[int, int] | None:
-    """Round to a (min, max) band, dropping absurd magnitudes."""
-    if hi < 8000 or lo > 500000:
+    """Round to a (min, max) band, dropping absurd magnitudes and implausibly wide spreads.
+
+    A real posted range's floor sits within ~40% of its ceiling (e.g. 40k–70k); a band whose
+    min is a small fraction of its max (30–25000, 5000–48000) is almost always two unrelated
+    figures the text glued together, not one salary — drop it rather than record a junk midpoint."""
+    if hi < 8000 or lo > 500000 or lo < hi * 0.35:
         return None
     return (int(round(lo)), int(round(hi)))
 
@@ -137,11 +162,7 @@ def annual_eur_band(phrase: str | None) -> tuple[int, int] | None:
     """A salary phrase → (min, max) EUR/year gross, or None if not a normalizable EUR figure."""
     if not phrase or _NON_EUR.search(phrase) or _HOURLY.search(phrase):
         return None
-    monthly = bool(_MONTHLY.search(phrase))
-    out = [a for v in _amounts(phrase) if (a := _annualize(v, monthly)) is not None]
-    if not out:
-        return None
-    return _clamp_band(min(out), max(out))
+    return _annualized_band(_amounts(phrase), bool(_MONTHLY.search(phrase)))
 
 
 def _num_or_none(x) -> float | None:
@@ -158,14 +179,10 @@ def job_annual_band(salary_min=None, salary_max=None, salary_text=None,
     description body. Returns None when nothing normalizes to trustworthy EUR/year pay."""
     lo, hi = _num_or_none(salary_min), _num_or_none(salary_max)
     if lo or hi:
-        # One period decision for the whole pair (annualizing each bound independently would
-        # mis-scale a min/max that straddles the monthly/annual threshold). LinkedIn also stores
-        # hourly/garbage pairs (e.g. 100–1000) here, so require a plausible full-time annual max.
-        vals = [v for v in (lo, hi) if v]
-        top = max(vals)
-        monthly = bool(_MONTHLY.search(str(salary_text or ""))) or top < 12000
-        factor = 12 if monthly else 1
-        band = _clamp_band(min(vals) * factor, top * factor)
+        # LinkedIn also stores hourly/garbage pairs here (e.g. 100–1000), so require a plausible
+        # full-time annual max before trusting a structured band.
+        band = _annualized_band([v for v in (lo, hi) if v],
+                                bool(_MONTHLY.search(str(salary_text or ""))))
         if band and band[1] >= 18000:
             return band
     return annual_eur_band(salary_text) or annual_eur_band(
