@@ -108,6 +108,33 @@ def test_market_json_is_stable_shape(populated, capsys):
     assert isinstance(out["top_demand"], list) and isinstance(out["gaps"], list)
 
 
+def test_market_salary_by_segment(populated):
+    """Disclosed pay (structured + description body) is normalized to EUR/year and summarized
+    per role segment, and the disclosure KPI counts the union — not just structured fields."""
+    conn, _ = populated
+    # Three disclosed data-analyst offers: structured range, monthly-in-text, description body.
+    jobs = {}
+    for jid, stext, desc in [
+        ("10", "", "Data Analyst role. Salario: 40.000 - 50.000 € brutos anuales. Apply."),
+        ("11", "", "Data Analyst. Retribución: 3.000 €/mes en 12 pagas."),   # → 36k/yr
+        ("12", "", "Data Analyst. Sueldo competitivo según valía."),         # not disclosed
+    ]:
+        r = {c: "" for c in db.JOB_COLS}
+        r.update(job_id=jid, title="Data Analyst", company_name="Acme", location="Madrid, Spain",
+                 workplace_type="remote", linkedin_url=f"https://www.linkedin.com/jobs/view/{jid}",
+                 salary_text=stext, description=desc)
+        jobs[jid] = r
+    db.upsert_jobs(conn, jobs, "2026-06-16")
+
+    s = market.summary(conn)
+    assert "salary_by_segment" in s
+    da = s["salary_by_segment"]["data-analyst"]
+    assert da["n"] == 2                       # #10 (45k mid) and #11 (36k) disclosed a band; #12 didn't
+    assert 36000 <= da["median"] <= 45000
+    assert da["p25"] <= da["median"] <= da["p75"]
+    assert s["salary_pct"] > 0                 # union disclosure counted
+
+
 def test_surface_json_is_stable_shape(populated, capsys):
     from jobcut.cli import main
     assert main(["surface", "--json"]) == 0

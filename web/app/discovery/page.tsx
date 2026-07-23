@@ -5,6 +5,7 @@ import {
   getMarket,
   regenerateMarket,
   type Market,
+  type SalaryBand,
   type SkillDemand,
   type SkillGap,
   type ScoreDistribution,
@@ -105,6 +106,8 @@ export default function DiscoveryPage() {
         <Stat icon="search" label="In your market" value={String(data.relevant)} />
         <Stat icon="banknote" label="Disclose salary" value={`${data.salary_pct}%`} />
       </section>
+
+      <SalaryRanges seg={data.salary_by_segment} segKeys={data.seg_keys} pct={data.salary_pct} />
 
       <Quadrant skills={data.top_demand} />
 
@@ -606,6 +609,110 @@ function Header({
         )}
       </div>
     </header>
+  );
+}
+
+// Estimated pay per role family, from the salaries offers actually disclosed (structured
+// fields + salary lines mined from the description), normalized to EUR/year gross. We show a
+// median with a p25–p75 band on a shared axis — robust to the odd outlier a raw min/max would
+// let through — plus the sample size, since disclosure is thin and thin buckets deserve a caveat.
+const SMALL_SAMPLE_N = 8;
+function fmtK(v: number): string {
+  return `€${Math.round(v / 1000)}k`;
+}
+function SalaryRanges({
+  seg,
+  segKeys,
+  pct,
+}: {
+  seg: Record<string, SalaryBand>;
+  segKeys: string[];
+  pct: number;
+}) {
+  const withData = segKeys.filter((k) => {
+    const b = seg[k];
+    return b && b.n > 0 && b.p25 != null && b.p75 != null && b.median != null;
+  });
+  if (withData.length === 0) return null;
+
+  const axisMin = Math.min(...withData.map((k) => seg[k].p25!));
+  const axisMax = Math.max(...withData.map((k) => seg[k].p75!));
+  const span = Math.max(1, axisMax - axisMin);
+  const pos = (v: number) => Math.max(0, Math.min(100, ((v - axisMin) / span) * 100));
+
+  return (
+    <section className="rounded-card border border-border bg-surface p-5 shadow-card">
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-semibold text-on-surface">Salary ranges by role</h2>
+        <span className="text-xs text-on-surface-variant">
+          from the {pct}% of offers that disclose pay · EUR/year gross · median with p25–p75 band
+        </span>
+      </div>
+      <p className="mb-4 text-sm text-on-surface-variant">
+        Estimated from the salaries employers actually published — structured fields plus pay
+        lines read from the description body.
+      </p>
+      <div className="space-y-3.5">
+        {segKeys.map((k) => {
+          const b = seg[k] ?? { n: 0 };
+          const label = humanizeSeg(k);
+          if (!b.n || b.p25 == null || b.p75 == null || b.median == null) {
+            return (
+              <div key={k} className="flex items-center gap-3 text-sm">
+                <span className="w-40 shrink-0 truncate text-on-surface">{label}</span>
+                <span className="text-on-surface-faint">No disclosed pay yet</span>
+              </div>
+            );
+          }
+          const thin = b.n < SMALL_SAMPLE_N;
+          const left = pos(b.p25);
+          const width = Math.max(1.5, pos(b.p75) - left);
+          return (
+            <div
+              key={k}
+              className="flex items-center gap-3"
+              role="img"
+              aria-label={`${label}: median ${fmtK(b.median)}, ${fmtK(b.p25)} to ${fmtK(
+                b.p75,
+              )}, from ${b.n} offers${thin ? " (small sample)" : ""}`}
+            >
+              <span className="w-40 shrink-0 truncate text-sm text-on-surface" title={label}>
+                {label}
+              </span>
+              <div className="relative h-6 flex-1">
+                <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
+                <div
+                  className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-full"
+                  style={{
+                    left: `${left}%`,
+                    width: `${width}%`,
+                    background: thin ? "var(--color-accent-amber)" : "var(--color-primary)",
+                    opacity: thin ? 0.55 : 0.85,
+                  }}
+                  title={`${fmtK(b.p25)} – ${fmtK(b.p75)} (p25–p75)`}
+                />
+                <div
+                  className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-on-surface"
+                  style={{ left: `${pos(b.median)}%` }}
+                  title={`median ${fmtK(b.median)}`}
+                />
+              </div>
+              <span className="w-16 shrink-0 text-right text-sm font-semibold tabular-nums text-on-surface">
+                {fmtK(b.median)}
+              </span>
+              <span
+                className={`w-14 shrink-0 text-right text-xs tabular-nums ${
+                  thin ? "text-accent-amber" : "text-on-surface-variant"
+                }`}
+                title={thin ? "Small sample — treat as indicative only" : `${b.n} disclosed offers`}
+              >
+                n={b.n}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
