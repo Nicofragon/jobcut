@@ -64,5 +64,10 @@ testpaths = ["tests"]
 line-length = 120
 
 [tool.ruff.lint]
+# Pin the rule set instead of inheriting ruff's defaults: 0.16 widened them (isort,
+# pyupgrade, …) and turned every CI run red on unchanged code, because the `dev` extra
+# installs ruff unpinned. These four are what the codebase has always been linted with
+# (ruff's pre-0.16 default) — a new release can't silently redefine the gate now.
+select = ["E4", "E7", "E9", "F"]
 # E702: allow the compact `score += x; reasons.append(...)` style used in the rubric.
 ignore = ["E702"]
