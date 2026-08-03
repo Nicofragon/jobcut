@@ -197,6 +197,91 @@ def test_process_timing_summary_counts_only_multi_round_apps(conn):
     assert s["avg_gap_days"] == (7.0 + 4.0) / 2    # 5.5
 
 
+def _log_round(conn, jid, index, stage, date):
+    """A round as the assistant/CLI writes it (meta.index carries the round number)."""
+    return db.record_interview_round(
+        conn, jid, meta=json.dumps({"stage": stage, "index": index}), now=f"{date}T12:00:00")
+
+
+def test_interview_funnel_counts_rounds_logged_outside_the_console(conn):
+    """A round logged by the assistant must appear in the funnel.
+
+    The funnel used to read `process_current` alone, so an application whose rounds came
+    in through `ingest-events` — which never touched that column — was missing entirely.
+    """
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    _log_round(conn, "1", 1, "Recruiter", "2026-06-02")
+    # a second app that only ever had its plan pointer moved by hand still counts too
+    db.set_application_status(conn, "2", "interview", now="2026-06-01T00:00:00")
+    db.set_process(conn, "2", ["A", "B"], current=2)
+
+    by_stage = {f["stage"]: f["reached"] for f in db.interview_funnel(conn)}
+    assert by_stage == {1: 2, 2: 1}
+
+
+def test_interview_funnel_counts_a_relogged_round_once(conn):
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    for date in ("2026-06-02", "2026-06-09"):  # same round 1, logged twice
+        _log_round(conn, "1", 1, "Recruiter", date)
+    assert db.interview_funnel(conn) == [{"stage": 1, "reached": 1, "conversion": None}]
+
+
+def test_process_timing_ignores_relogged_rounds(conn):
+    """Duplicated rounds used to land as extra 0-day gaps, so "days between rounds"
+    collapsed toward zero and the end-to-end span stretched to the last re-log."""
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    for idx, stage, date in [(1, "R1", "2026-06-01"), (2, "R2", "2026-06-08"),
+                             (3, "R3", "2026-06-15")]:
+        db.add_event(conn, "1", "interview", meta=json.dumps({"stage": stage, "index": idx}),
+                     now=f"{date}T12:00:00")
+    # the whole process re-logged in one batch a week later (what a catch-up prompt did)
+    for idx, stage in [(1, "R1"), (2, "R2"), (3, "R3")]:
+        db.add_event(conn, "1", "interview", meta=json.dumps({"stage": stage, "index": idx}),
+                     now="2026-06-22T12:00:00")
+
+    t = db.process_timing(conn, "1")
+    assert t["rounds"] == 3          # not 6
+    assert t["gaps_days"] == [7, 7]  # not [7, 7, 7, 0, 0]
+    assert t["duration_days"] == 14  # not 21
+
+
+def test_repair_rounds_removes_duplicates_and_resyncs_the_pointer(conn):
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    db.set_process(conn, "1", ["R1", "R2"], current=0)
+    for idx, date in [(1, "2026-06-01"), (2, "2026-06-08"), (1, "2026-06-15"),
+                      (2, "2026-06-15")]:
+        db.add_event(conn, "1", "interview", meta=json.dumps({"index": idx}),
+                     now=f"{date}T12:00:00")
+
+    dry = db.dedupe_interview_rounds(conn)
+    assert dry["removed"] == 2 and dry["apps"] == 1
+    assert len([e for e in db.get_events(conn, "1") if e["kind"] == "interview"]) == 4  # untouched
+
+    report = db.dedupe_interview_rounds(conn, apply=True)
+    assert report["removed"] == 2
+    kept = [e for e in db.get_events(conn, "1") if e["kind"] == "interview"]
+    assert len(kept) == 2
+    assert sorted(e["ts"] for e in kept) == ["2026-06-01T12:00:00", "2026-06-08T12:00:00"]
+    assert db.get_application(conn, "1")["process_current"] == 2  # pointer re-synced
+    # idempotent: a second pass finds nothing
+    assert db.dedupe_interview_rounds(conn, apply=True)["removed"] == 0
+
+
+def test_editing_the_stage_list_keeps_progress(conn):
+    """Renaming a stage must not send you back to round 1 — that reset is what made the
+    console re-log rounds 1..N on the next advance."""
+    db.set_application_status(conn, "1", "interview", now="2026-06-01T00:00:00")
+    db.set_process(conn, "1", ["Recruiter", "Técnica", "HM"], current=0)
+    db.advance_process(conn, "1", now="2026-06-02T00:00:00")
+    db.advance_process(conn, "1", now="2026-06-08T00:00:00")
+
+    out = db.set_process(conn, "1", ["Recruiter screen", "Technical", "Hiring Manager"])
+    assert out["process_current"] == 2  # progress kept, not reset to 0
+    # a shorter plan clamps, and an explicit 0 still resets on purpose
+    assert db.set_process(conn, "1", ["Only one"])["process_current"] == 1
+    assert db.set_process(conn, "1", ["A", "B"], current=0)["process_current"] == 0
+
+
 def test_process_timing_summary_empty(conn):
     assert db.process_timing_summary(conn) == {
         "processes": 0, "avg_duration_days": None, "avg_gap_days": None}

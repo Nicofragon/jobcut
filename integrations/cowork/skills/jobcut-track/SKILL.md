@@ -73,6 +73,10 @@ interview prep, a pitch, STAR stories, a study sheet, a post-round debrief — i
    - **Log an interview round** → `{"job_id": "...", "kind": "interview",
      "body": "Technical with Sam", "meta": {"stage": "Technical", "index": 2},
      "date": "2026-06-15"}` (use `date` for when the round actually happened; `YYYY-MM-DD`).
+     **Always send `meta.index`** — the round number *is* the round's identity. Re-sending
+     round 2 **corrects** it (date/body) instead of adding a second one, so catching up a
+     whole process is safe to re-run, and logging a round also advances the interview
+     process the console shows. Without an `index` each entry counts as a new round.
    - **Change status** → `{"job_id": "...", "status": "interview"}` (or `offer`,
      `rejected`, `withdrawn`, `screen`, `applied`, …). This is the funnel choke-point —
      use the `status` field, not a `status_change` kind.

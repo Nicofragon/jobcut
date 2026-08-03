@@ -413,6 +413,24 @@ def cmd_age_applications(args) -> int:
     return 0
 
 
+def cmd_repair_rounds(args) -> int:
+    """Drop re-logged interview rounds and re-sync each plan pointer. Dry-run by default."""
+    from . import db
+    conn = db.connect()
+    report = db.dedupe_interview_rounds(conn, apply=args.apply)
+    if not report["removed"]:
+        print("nothing to repair (one event per interview round already)")
+        return 0
+    for d in report["detail"]:
+        print(f"  {d['job_id']}: {d['kept']} round(s) kept, {d['removed']} duplicate(s) "
+              f"{'removed' if args.apply else 'to remove'}")
+    verb = "removed" if args.apply else "would remove"
+    print(f"repair-rounds · {verb} {report['removed']} duplicate round(s) "
+          f"across {report['apps']} application(s)"
+          + ("" if args.apply else " — re-run with --apply to write"))
+    return 0
+
+
 def _web_is_stale(web, out) -> bool:
     """True if any web source file is newer than the built console (e.g. after a git pull)."""
     try:
@@ -1016,6 +1034,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("age-applications",
                    help="age silent 'Applied' roles (no reply ≥30d) to 'No response' (idempotent)"
                    ).set_defaults(func=cmd_age_applications)
+
+    prr = sub.add_parser("repair-rounds",
+                         help="remove re-logged interview rounds from the timeline (dry-run by default)")
+    prr.add_argument("--apply", action="store_true", help="actually delete the duplicates")
+    prr.set_defaults(func=cmd_repair_rounds)
 
     ps = sub.add_parser("serve", help="serve the API + web console (one command)")
     ps.add_argument("--host", default="127.0.0.1", help="bind host (default 127.0.0.1)")

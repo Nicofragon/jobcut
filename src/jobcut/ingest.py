@@ -473,8 +473,14 @@ def ingest_events(path, conn=None) -> dict:
             if kind in _EVENT_KINDS:
                 meta = e.get("meta")
                 meta_s = json.dumps(meta, ensure_ascii=False) if isinstance(meta, dict) else ""
-                db.add_event(conn, jid, kind, body=str(e.get("body", "") or ""),
-                             meta=meta_s, now=when)
+                body = str(e.get("body", "") or "")
+                if kind == "interview":
+                    # A round is identified by its number, not by the row: re-logging round 2
+                    # corrects that round instead of appending a second one, and moves the plan
+                    # pointer the console's advance button would have moved.
+                    db.record_interview_round(conn, jid, body=body, meta=meta_s, now=when)
+                else:
+                    db.add_event(conn, jid, kind, body=body, meta=meta_s, now=when)
                 written += 1
                 continue
             errors.append(f"entry {i} (job {jid}): no actionable op "
