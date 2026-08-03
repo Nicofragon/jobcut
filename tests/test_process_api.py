@@ -37,6 +37,32 @@ def test_put_and_advance_and_funnel(client):
     assert funnel.json()[0] == {"stage": 1, "reached": 1, "conversion": None}
 
 
+def test_post_interview_event_is_idempotent_and_moves_the_pointer(client):
+    """The API write path obeys the same round identity as the CLI bridge — one row per
+    round, pointer follows. If the paths disagree the funnel drifts apart again."""
+    client.put("/api/applications/1/process",
+               json={"stages": ["Recruiter", "Técnica", "HM"], "current": 0})
+    meta = json.dumps({"stage": "Técnica", "index": 2})
+    first = client.post("/api/applications/1/events",
+                        json={"kind": "interview", "body": "round 2", "meta": meta})
+    again = client.post("/api/applications/1/events",
+                        json={"kind": "interview", "body": "rescheduled", "meta": meta})
+    assert first.status_code == 200 and again.status_code == 200
+    assert again.json()["event_id"] == first.json()["event_id"]  # corrected, not appended
+    assert again.json()["body"] == "rescheduled"
+
+    events = client.get("/api/applications/1/events").json()
+    assert len([e for e in events if e["kind"] == "interview"]) == 1
+    assert client.get("/api/applications/1").json()["process_current"] == 2
+
+
+def test_put_process_without_current_keeps_progress(client):
+    client.put("/api/applications/1/process", json={"stages": ["A", "B", "C"], "current": 0})
+    client.post("/api/applications/1/process/advance", json={})
+    kept = client.put("/api/applications/1/process", json={"stages": ["A2", "B2", "C2"]})
+    assert kept.json()["process_current"] == 1  # editing the plan doesn't rewind it
+
+
 def test_put_process_404(client):
     assert client.put("/api/applications/999/process", json={"stages": ["A"]}).status_code == 404
 

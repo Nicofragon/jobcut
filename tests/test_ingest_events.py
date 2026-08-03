@@ -68,6 +68,62 @@ def test_interview_carries_meta_and_normalized_ts(conn, tmp_path):
     assert ev["body"] == "R3 con HM"
 
 
+def test_interview_round_is_idempotent_on_its_index(conn, tmp_path):
+    """Re-logging round 2 corrects that round — it never becomes a second interview.
+
+    An assistant told to "catch me up on this process" re-emits rounds 1..N; appending
+    them duplicated every round on the timeline and injected 0-day gaps into the timing.
+    """
+    jid = _seed_job(conn)
+    db.set_application_status(conn, jid, "interview")
+    round2 = {"job_id": jid, "kind": "interview", "meta": {"stage": "Technical", "index": 2}}
+    ingest.ingest_events(_write_events(tmp_path, [{**round2, "date": "2026-06-15"}]), conn)
+    ingest.ingest_events(
+        _write_events(tmp_path, [{**round2, "body": "moved a week", "date": "2026-06-22"}],
+                      name="again.json"), conn)
+
+    rounds = [e for e in db.get_events(conn, jid) if e["kind"] == "interview"]
+    assert len(rounds) == 1
+    assert rounds[0]["ts"] == "2026-06-22T12:00:00"  # the correction won
+    assert rounds[0]["body"] == "moved a week"
+
+
+def test_interview_round_moves_the_plan_pointer(conn, tmp_path):
+    """A round logged by the assistant advances the process like the console's button —
+    otherwise it stays invisible to the interview funnel."""
+    jid = _seed_job(conn)
+    db.set_application_status(conn, jid, "interview")
+    db.set_process(conn, jid, ["Recruiter", "Technical", "HM"], current=0)
+    ingest.ingest_events(_write_events(tmp_path, [
+        {"job_id": jid, "kind": "interview", "meta": {"stage": "Technical", "index": 2},
+         "date": "2026-06-15"}]), conn)
+
+    assert db.get_application(conn, jid)["process_current"] == 2
+    assert db.rounds_reached(conn)[jid] == 2
+
+
+def test_interview_round_without_index_takes_the_next_one(conn, tmp_path):
+    jid = _seed_job(conn)
+    db.set_application_status(conn, jid, "interview")
+    ingest.ingest_events(_write_events(tmp_path, [
+        {"job_id": jid, "kind": "interview", "body": "first", "date": "2026-06-01"},
+        {"job_id": jid, "kind": "interview", "body": "second", "date": "2026-06-08"}]), conn)
+
+    rounds = [e for e in db.get_events(conn, jid) if e["kind"] == "interview"]
+    assert len(rounds) == 2  # no index to collide on → two distinct rounds
+    assert db.rounds_reached(conn)[jid] == 2
+
+
+def test_note_stays_append_only(conn, tmp_path):
+    """The round-identity rule is scoped to interviews: notes still append, every time."""
+    jid = _seed_job(conn)
+    db.set_application_status(conn, jid, "applied")
+    for _ in range(2):
+        ingest.ingest_events(_write_events(tmp_path, [
+            {"job_id": jid, "kind": "note", "body": "same text"}], name="n.json"), conn)
+    assert len([e for e in db.get_events(conn, jid) if e["kind"] == "note"]) == 2
+
+
 def test_status_creates_row_and_status_change_event(conn, tmp_path):
     jid = _seed_job(conn)
     assert db.get_application(conn, jid) is None
@@ -168,6 +224,31 @@ def test_cli_ingest_events_ok(_isolated, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "ingest-events" in out
     assert "wrote 1 update(s)" in out
+
+
+def test_cli_repair_rounds_dry_run_then_apply(_isolated, capsys):
+    main(["init", "--no-input"])
+    conn = db.connect()
+    db.set_application_status(conn, "1", "interview")
+    for idx, date in [(1, "2026-06-01"), (2, "2026-06-08"), (1, "2026-06-15")]:
+        db.add_event(conn, "1", "interview", meta=json.dumps({"index": idx}),
+                     now=f"{date}T12:00:00")
+    conn.close()
+
+    assert main(["repair-rounds"]) == 0
+    assert "would remove 1 duplicate round(s)" in capsys.readouterr().out
+    conn = db.connect()
+    assert len([e for e in db.get_events(conn, "1") if e["kind"] == "interview"]) == 3
+    conn.close()
+
+    assert main(["repair-rounds", "--apply"]) == 0
+    assert "removed 1 duplicate round(s)" in capsys.readouterr().out
+    conn = db.connect()
+    assert len([e for e in db.get_events(conn, "1") if e["kind"] == "interview"]) == 2
+    conn.close()
+
+    assert main(["repair-rounds"]) == 0
+    assert "nothing to repair" in capsys.readouterr().out
 
 
 def test_cli_ingest_events_missing_file(_isolated, capsys):

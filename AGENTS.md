@@ -26,7 +26,7 @@ what the user is recording**:
 | The user tells you… | It's a… | Through | Never put it in |
 |---|---|---|---|
 | Something that happened / a reminder ("previous rejection", "recruiter called") | **note** | `jobcut-track` (`kind:"note"`) | `scores.match_reasons` |
-| An interview round | **interview** event | `jobcut-track` | — |
+| An interview round | **interview** event (send `meta.index` — re-sending a round corrects it) | `jobcut-track` | — |
 | A pipeline status change | **status** | `jobcut-track` | — |
 | Why a job scored what it did | **scoring rationale** | `jobcut-score` only | a note |
 

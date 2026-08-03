@@ -112,7 +112,7 @@ what the user is recording** — this is the distinction that's been gotten wron
 |---|---|---|---|
 | Something that happened / a reminder ("previous rejection", "recruiter called") | a **note** timeline event | `jobcut-track` → `ingest-events` (`kind:"note"`) | "Notes & activity" |
 | A long doc to re-read (interview prep, pitch, STAR stories, study sheet, debrief) | an **application document** | `jobcut-docs` → `ingest-documents` | "Prep documents" |
-| An interview round | an **interview** event | `jobcut-track` (`kind:"interview"`, `meta.stage`/`index`, `date`) | timeline + process timing |
+| An interview round | an **interview** event | `jobcut-track` (`kind:"interview"`, `meta.stage`/`index`, `date`) | timeline + interview funnel + timing |
 | Pipeline status (applied / interview / offer / rejected …) | `applications.status` | `jobcut-track` (`status`) | the funnel + status badge |
 | A field (priority, next action, contact, cv_version) | `applications.*` | `jobcut-track` (`fields`) | tracker fields |
 | **Why a job scored what it did** | **`scores.match_reasons`** | **`jobcut-score` → `ingest-scores` only** | the score's "why" line |

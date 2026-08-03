@@ -502,14 +502,22 @@ def set_process(conn: sqlite3.Connection, job_id: str, stages: list[str],
     the existing row is returned unchanged so an accidental empty write can't
     silently wipe a stored plan. `current` is clamped to 0..len(stages) relative
     to the *filtered* list.
+
+    An omitted `current` KEEPS the progress already made (clamped to the new plan
+    length) — editing the stage list must not silently send you back to round 1. It
+    used to reset to 0, and the console saves an edited plan without a `current`, so
+    renaming a stage after two rounds re-ran those rounds and duplicated them on the
+    timeline. Pass `current=0` to reset on purpose.
     """
     jid = str(job_id)
-    if conn.execute("SELECT 1 FROM applications WHERE job_id = ?", (jid,)).fetchone() is None:
+    app = get_application(conn, jid)
+    if app is None:
         return None
     stages = [str(s).strip() for s in stages if str(s).strip()]
     if not stages:
         return get_application(conn, jid)
-    cur = 0 if current is None else max(0, min(int(current), len(stages)))
+    kept = int(app.get("process_current") or 0)
+    cur = min(kept, len(stages)) if current is None else max(0, min(int(current), len(stages)))
     now = now or _now_iso()
     conn.execute(
         'UPDATE applications SET process_stages = ?, process_current = ?, updated_at = ? '
@@ -589,6 +597,129 @@ def add_event(conn: sqlite3.Connection, job_id: str, kind: str, body: str = "",
     conn.commit()
     row = conn.execute("SELECT * FROM application_events WHERE event_id = ?", (cur.lastrowid,)).fetchone()
     return dict(row)
+
+
+def round_index(meta: str | None, fallback: int = 0) -> int:
+    """The round number an interview event carries in `meta.index` (0 if it has none).
+
+    A round is a real-world thing with an ordinal ("the 2nd interview"), so `index` — not
+    the row id — is its identity. `fallback` is what to use for a legacy/hand-written
+    event that never got one (callers pass its position in the timeline).
+    """
+    try:
+        idx = json.loads(meta or "{}").get("index")
+    except (ValueError, TypeError):
+        return fallback
+    return idx if isinstance(idx, int) and idx > 0 else fallback
+
+
+def _rounds_by_app(conn: sqlite3.Connection) -> dict[str, dict[int, dict]]:
+    """{job_id: {round_index: earliest event row}} over kind='interview'.
+
+    Collapses re-logs of the same round: an assistant catching up a whole process
+    re-emits rounds 1..N, which would otherwise read as N extra interviews. The
+    EARLIEST timestamp wins — that's when the round actually happened; a later
+    duplicate is a re-log, not a reschedule (a real correction goes through
+    `record_interview_round`, which updates the round in place instead of appending).
+    """
+    out: dict[str, dict[int, dict]] = {}
+    for r in conn.execute("SELECT * FROM application_events WHERE kind = 'interview' "
+                          "ORDER BY ts, event_id").fetchall():
+        jid = str(r["job_id"])
+        rounds = out.setdefault(jid, {})
+        idx = round_index(r["meta"], fallback=len(rounds) + 1)
+        rounds.setdefault(idx, dict(r))
+    return out
+
+
+def rounds_reached(conn: sqlite3.Connection) -> dict[str, int]:
+    """{job_id: furthest interview round reached} — the interview funnel's population.
+
+    Rounds arrive by two paths and BOTH count: the console's advance button (writes an
+    `interview` event *and* bumps `process_current`) and `ingest-events` / the assistant
+    (writes the event). Reading only `process_current` — as this used to — silently drops
+    every round logged by the assistant; reading only events drops a plan whose pointer
+    was moved by hand in the stage editor. Max of the two, so neither path is invisible.
+    """
+    out = {jid: max(rounds) for jid, rounds in _rounds_by_app(conn).items() if rounds}
+    for r in conn.execute("SELECT job_id, process_current FROM applications "
+                          "WHERE COALESCE(process_current, 0) > 0").fetchall():
+        jid = str(r["job_id"])
+        out[jid] = max(out.get(jid, 0), int(r["process_current"]))
+    return out
+
+
+def record_interview_round(conn: sqlite3.Connection, job_id: str, body: str = "",
+                           meta: str = "", now: str | None = None) -> dict:
+    """Log an interview round: idempotent on the round number, and keeps the plan in sync.
+
+    The one documented exception to the append-only timeline. Re-logging round 2 is a
+    *correction of the same round*, not a second interview, so it UPDATEs that event
+    (ts/body/meta) instead of appending — otherwise re-running a "catch me up on this
+    process" prompt duplicates every round and wrecks the timing averages.
+
+    Also advances `process_current` to this round (capped at the plan length, matching
+    `advance_process`), so a round logged through the CLI/assistant moves the pointer the
+    console's advance button would have moved. Returns the stored event row.
+    """
+    jid = str(job_id)
+    ts = now or _now_iso()
+    existing = _rounds_by_app(conn).get(jid, {})
+    idx = round_index(meta, fallback=(max(existing) if existing else 0) + 1)
+    prior = existing.get(idx)
+    if prior is not None:
+        conn.execute('UPDATE application_events SET "ts" = ?, "body" = ?, "meta" = ? '
+                     'WHERE event_id = ?', (ts, body or "", meta or "", prior["event_id"]))
+        conn.commit()
+        event = dict(conn.execute("SELECT * FROM application_events WHERE event_id = ?",
+                                  (prior["event_id"],)).fetchone())
+    else:
+        event = add_event(conn, jid, "interview", body=body, meta=meta, now=ts)
+    _sync_process_current(conn, jid, idx, now=ts)
+    return event
+
+
+def _sync_process_current(conn: sqlite3.Connection, job_id: str, reached: int,
+                          now: str | None = None) -> None:
+    """Move the plan pointer forward to `reached` (never backward), capped at the plan
+    length so it stays a valid index into `process_stages` for the console."""
+    app = get_application(conn, job_id)
+    if app is None:
+        return
+    stages = json.loads(app["process_stages"] or "[]") if app.get("process_stages") else []
+    target = min(reached, len(stages)) if stages else reached
+    if target <= int(app.get("process_current") or 0):
+        return
+    conn.execute('UPDATE applications SET process_current = ?, updated_at = ? WHERE job_id = ?',
+                 (target, now or _now_iso(), str(job_id)))
+    conn.commit()
+
+
+def dedupe_interview_rounds(conn: sqlite3.Connection, apply: bool = False) -> dict:
+    """Repair timelines written before rounds were idempotent: drop re-logged rounds and
+    re-sync every plan pointer. Dry-run by default — pass apply=True to write.
+
+    Keeps the earliest event per (job_id, round index) and deletes the rest. Returns
+    {removed, apps, detail:[{job_id, kept, removed, process_current}]}.
+    """
+    detail, removed = [], 0
+    for jid, rounds in _rounds_by_app(conn).items():
+        keep = {r["event_id"] for r in rounds.values()}
+        dupes = [row["event_id"] for row in conn.execute(
+            "SELECT event_id FROM application_events WHERE kind = 'interview' AND job_id = ?",
+            (jid,)).fetchall() if row["event_id"] not in keep]
+        if not dupes:
+            continue
+        if apply:
+            conn.executemany("DELETE FROM application_events WHERE event_id = ?",
+                             [(e,) for e in dupes])
+            conn.commit()
+            _sync_process_current(conn, jid, max(rounds))
+        removed += len(dupes)
+        app = get_application(conn, jid) or {}
+        detail.append({"job_id": jid, "kept": len(keep), "removed": len(dupes),
+                       "process_current": app.get("process_current")})
+    return {"removed": removed, "apps": len(detail), "detail": detail}
 
 
 def get_events(conn: sqlite3.Connection, job_id: str) -> list[dict]:
@@ -863,13 +994,10 @@ def application_funnel_cumulative(conn: sqlite3.Connection) -> dict:
 
 
 def interview_funnel(conn: sqlite3.Connection) -> list[dict]:
-    """Stage-conversion funnel by interview index. reached[N] = #apps whose
-    process_current >= N; conversion[N] = reached[N+1]/reached[N]. Apps with
-    process_current = 0 (no process) are excluded."""
-    currents = [int(r["process_current"] or 0)
-                for r in conn.execute(
-                    "SELECT process_current FROM applications "
-                    "WHERE process_current IS NOT NULL AND process_current > 0").fetchall()]
+    """Stage-conversion funnel by interview round. reached[N] = #apps that reached round
+    N (see `rounds_reached` — timeline rounds OR the plan pointer, whichever is further);
+    conversion[N] = reached[N+1]/reached[N]. Apps with no rounds at all are excluded."""
+    currents = list(rounds_reached(conn).values())
     if not currents:
         return []
     top = max(currents)
@@ -883,18 +1011,18 @@ def interview_funnel(conn: sqlite3.Connection) -> list[dict]:
 
 
 def _round_dates(conn, job_id):
-    """Sorted list of date objects for an app's kind='interview' events (day granularity)."""
-    rows = conn.execute(
-        "SELECT ts FROM application_events WHERE job_id = ? AND kind = 'interview' ORDER BY ts",
-        (str(job_id),)).fetchall()
+    """Sorted dates of an app's interview rounds, ONE per round (day granularity).
+
+    Deduped via `_rounds_by_app`: a re-logged round used to enter as an extra 0-day gap,
+    which dragged "days between rounds" toward zero and stretched the end-to-end span.
+    """
     out = []
-    for r in rows:
-        ts = (r["ts"] or "")[:10]
+    for r in _rounds_by_app(conn).get(str(job_id), {}).values():
         try:
-            out.append(datetime.date.fromisoformat(ts))
+            out.append(datetime.date.fromisoformat((r["ts"] or "")[:10]))
         except ValueError:
             continue
-    return out
+    return sorted(out)
 
 
 def process_timing(conn: sqlite3.Connection, job_id: str) -> dict | None:

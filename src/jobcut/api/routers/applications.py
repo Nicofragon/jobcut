@@ -161,6 +161,10 @@ def post_event(job_id: str, body: EventIn, conn: sqlite3.Connection = Depends(ge
     that never fabricates an 'applied' application."""
     if body.kind not in EVENT_KINDS:
         raise HTTPException(status_code=422, detail=f"kind must be one of {sorted(EVENT_KINDS)}")
+    # Same round-identity rule as the CLI bridge: one row per interview round, and the
+    # plan pointer follows. Every write path has to agree or the funnel drifts again.
+    if body.kind == "interview":
+        return db.record_interview_round(conn, job_id, body=body.body, meta=body.meta)
     return db.add_event(conn, job_id, body.kind, body=body.body, meta=body.meta)
 
 
