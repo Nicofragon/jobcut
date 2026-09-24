@@ -286,7 +286,12 @@ def shortlist_data(conn, *, min_score=60, backlog_min=75, q=None, location=None,
     latest = sd.max() if len(sd) else today
     meta["last_scored"] = str(latest) if (len(sd) and str(latest)[:4].isdigit()) else None
     today_top = f[(sd == latest) & (f.score >= min_score)].sort_values("score", ascending=False).head(limit)
-    backlog = f[(sd < latest) & (f.score >= min_score)].sort_values("score", ascending=False).head(limit)
+    # "Earlier" reads as a timeline: newest publication day first (first_seen when the
+    # offer has no posted_date), score breaking ties within the same day.
+    backlog = f[(sd < latest) & (f.score >= min_score)].copy()
+    posted = backlog.posted_date.where(~backlog.posted_date.map(blank), backlog.first_seen)
+    backlog["_day"] = posted.fillna("").astype(str).str[:10]
+    backlog = backlog.sort_values(["_day", "score"], ascending=False).head(limit)
     return {"today": _records(today_top), "backlog": _records(backlog), "meta": meta}
 
 

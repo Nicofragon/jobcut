@@ -280,6 +280,25 @@ def test_shortlist_feed_limit_exceeds_cli_top_n(conn):
     assert {r["job_id"] for r in d["today"]} == {"13"}
 
 
+def test_backlog_sorted_by_posted_date_then_score(conn):
+    # "Earlier" = newest publication day first, score breaks ties within a day;
+    # no posted_date → falls back to first_seen.
+    link = lambda j: f"https://www.linkedin.com/jobs/view/{j}"  # noqa: E731
+    agg = {
+        "1": _job("1", "s", linkedin_url=link(1), posted_date="2026-06-10"),
+        "2": _job("2", "s", linkedin_url=link(2), posted_date="2026-06-18T09:00:00"),
+        "3": _job("3", "s", linkedin_url=link(3), posted_date="2026-06-18T20:00:00"),
+        "4": _job("4", "s", linkedin_url=link(4), posted_date="", first_seen="2026-06-15"),
+        "5": _job("5", "s", linkedin_url=link(5)),
+    }
+    db.upsert_jobs(conn, agg, "2026-06-20")
+    db.upsert_scores(conn, [_scored("1", 95, "2026-06-20"), _scored("2", 90, "2026-06-20"),
+                            _scored("3", 75, "2026-06-20"), _scored("4", 80, "2026-06-20")])
+    db.upsert_scores(conn, [_scored("5", 90, "2026-06-23")])  # latest batch
+    d = surface.shortlist_data(conn, min_score=70, today="2026-06-24")
+    assert [r["job_id"] for r in d["backlog"]] == ["2", "3", "4", "1"]
+
+
 def test_stage_durations_stalled_dormant(conn):
     # Moved to interview 20 days ago and never since → stallable + stalled (14..90d).
     db.set_application_status(conn, "1", "applied", now="2026-06-01T10:00:00")
