@@ -368,6 +368,8 @@ def add_job(fields: dict, conn=None) -> dict:
     ValueError otherwise. The URL is stored in `apply_url` (and `linkedin_url` when it's
     a LinkedIn url). Routes through the SAME path import_jobs uses (`pull.aggregate_today`
     + `db.upsert_jobs`), so first_seen/last_seen and idempotent re-adds are handled there.
+    Re-adding an existing job only fills its EMPTY link fields (never overwrites), so a
+    LinkedIn url can be attached to a job first added from its ATS page.
     """
     from . import jobid, pull
 
@@ -405,6 +407,10 @@ def add_job(fields: dict, conn=None) -> dict:
         today = datetime.date.today().isoformat()
         today_agg = pull.aggregate_today([row], today)
         inserted, _updated = db.upsert_jobs(conn, today_agg, today)
+        if not inserted:
+            # upsert leaves stable fields alone; still attach links the job lacks
+            db.fill_blank_job_fields(conn, jid, {"apply_url": row["apply_url"],
+                                                 "linkedin_url": row["linkedin_url"]})
         return {"job_id": jid, "created": inserted > 0}
     finally:
         if own:

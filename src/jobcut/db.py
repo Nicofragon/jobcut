@@ -389,6 +389,28 @@ def get_job_row(conn: sqlite3.Connection, job_id: str):
     return conn.execute("SELECT * FROM jobs WHERE job_id = ?", (str(job_id),)).fetchone()
 
 
+def fill_blank_job_fields(conn: sqlite3.Connection, job_id: str, fields: dict) -> list[str]:
+    """Set job columns that are currently empty/NULL; never overwrite a value.
+
+    Lets a manual re-add attach a missing link (e.g. the LinkedIn url for a job first
+    added from its ATS page) without clobbering what a scrape or earlier add stored.
+    Returns the columns actually filled.
+    """
+    filled = []
+    for col, val in fields.items():
+        if col not in JOB_COLS or not str(val or "").strip():
+            continue
+        cur = conn.execute(
+            f'UPDATE jobs SET "{col}" = ? WHERE job_id = ? AND ("{col}" IS NULL OR TRIM("{col}") = \'\')',
+            (str(val), str(job_id)),
+        )
+        if cur.rowcount:
+            filled.append(col)
+    if filled:
+        conn.commit()
+    return filled
+
+
 def get_score_row(conn: sqlite3.Connection, job_id: str):
     """One score row by primary key (O(1))."""
     return conn.execute("SELECT * FROM scores WHERE job_id = ?", (str(job_id),)).fetchone()

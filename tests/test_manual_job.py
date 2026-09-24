@@ -89,6 +89,20 @@ def test_add_job_linkedin_stores_both_urls(conn):
     assert row["apply_url"] == url
 
 
+def test_add_job_existing_job_fills_blank_links_only(conn):
+    # Job first added from its ATS page; later the user finds the LinkedIn posting.
+    ats = "https://jobs.ashbyhq.com/acme/abc-123"
+    res = ingest.add_job({"url": ats, "company": "Acme", "title": "Analyst",
+                          "description": "full text"}, conn)
+    li = "https://www.linkedin.com/jobs/view/4414046061"
+    again = ingest.add_job({"job_id": res["job_id"], "url": li}, conn)
+    assert again["created"] is False
+    row = db.get_job_row(conn, res["job_id"])
+    assert row["linkedin_url"] == li          # blank link filled
+    assert row["apply_url"] == ats            # existing link never overwritten
+    assert row["description"] == "full text"  # stable fields untouched
+
+
 def test_add_job_requires_minimum_fields(conn):
     with pytest.raises(ValueError):
         ingest.add_job({"location": "Madrid"}, conn)
